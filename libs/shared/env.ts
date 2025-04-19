@@ -13,6 +13,7 @@ type AllowedEnvs =
     | 'IS_DEMO'
     | 'STORE_PREFIX'
     | 'CONFIG_FILE'
+    | 'DATABASE_URL'  // 添加了这一行
     | 'ALLOW_DEBUG';
 
 /**
