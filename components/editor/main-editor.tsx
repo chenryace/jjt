@@ -46,12 +46,15 @@ const MainEditor: FC<
         const tempContent = localStorage.getItem(tempContentKey);
         
         if (tempContent) {
-            // 保存到数据库
-            await updateNote({ content: tempContent });
-            // 清除临时内容
-            localStorage.removeItem(tempContentKey);
-            // 标记没有未保存的更改
-            editMode.setHasUnsavedChanges(false);
+            try {
+                // 保存到数据库
+                await updateNote({ content: tempContent });
+                // 标记没有未保存的更改
+                editMode.setHasUnsavedChanges(false);
+                // 不删除localStorage中的内容，避免重置编辑器状态
+            } catch (error) {
+                console.error('保存笔记失败:', error);
+            }
         }
     }, [note?.id, updateNote, editMode]);
 
@@ -89,6 +92,7 @@ const MainEditor: FC<
                                         size="small"
                                         color="primary"
                                         variant="contained"
+                                        disabled={!editMode.hasUnsavedChanges}
                                     >
                                         保存
                                     </Button>
