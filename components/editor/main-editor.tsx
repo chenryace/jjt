@@ -3,7 +3,7 @@ import Editor, { EditorProps } from './editor';
 import Backlinks from './backlinks';
 import EditorState from 'libs/web/state/editor';
 import UIState from 'libs/web/state/ui';
-import { FC, useCallback, useEffect } from 'react';
+import { FC, useCallback } from 'react';
 import { NoteModel } from 'libs/shared/note';
 import { EDITOR_SIZE } from 'libs/shared/meta';
 import NoteState from 'libs/web/state/note';
