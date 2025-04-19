@@ -34,6 +34,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const [editorContent, setEditorContent] = useState<string>('');
     // 使用ref跟踪是否已经初始化内容
     const contentInitializedRef = useRef(false);
+    // 使用ref跟踪编辑器是否已经挂载
+    const editorMountedRef = useRef(false);
     
     const height = use100vh();
     const mounted = useMounted();
@@ -45,18 +47,21 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     
     // 初始化编辑器内容
     useEffect(() => {
-        if (!mounted || !note?.id || contentInitializedRef.current) return;
+        if (!mounted || !note?.id) return;
         
-        // 从localStorage获取内容或使用note.content
-        const tempContentKey = `temp_content_${note.id}`;
-        const tempContent = localStorage.getItem(tempContentKey);
-        const initialContent = tempContent || note.content || '';
-        
-        // 设置编辑器内容
-        setEditorContent(initialContent);
-        
-        // 标记内容已初始化
-        contentInitializedRef.current = true;
+        // 只在内容未初始化或笔记ID变化时初始化内容
+        if (!contentInitializedRef.current) {
+            // 从localStorage获取内容或使用note.content
+            const tempContentKey = `temp_content_${note.id}`;
+            const tempContent = localStorage.getItem(tempContentKey);
+            const initialContent = tempContent || note.content || '';
+            
+            // 设置编辑器内容
+            setEditorContent(initialContent);
+            
+            // 标记内容已初始化
+            contentInitializedRef.current = true;
+        }
     }, [mounted, note?.id, note?.content]);
     
     // 编辑器内容变化处理函数
@@ -65,8 +70,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         const newContent = value();
         
-        // 更新状态中的内容
-        setEditorContent(newContent);
+        // 更新状态中的内容（不触发重新渲染）
+        if (editorMountedRef.current) {
+            setEditorContent(newContent);
+        }
         
         // 存储到localStorage
         const tempContentKey = `temp_content_${note.id}`;
@@ -100,6 +107,19 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 标记内容已初始化
         contentInitializedRef.current = true;
     }, [note?.id, note?.content]);
+    
+    // 编辑器挂载后的处理
+    useEffect(() => {
+        if (mounted && note?.id) {
+            // 标记编辑器已挂载
+            editorMountedRef.current = true;
+            
+            return () => {
+                // 编辑器卸载时清除标记
+                editorMountedRef.current = false;
+            };
+        }
+    }, [mounted, note?.id]);
 
     return (
         <>
