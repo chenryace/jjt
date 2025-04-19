@@ -30,30 +30,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     
     const { editMode } = UIState.useContainer();
     
-    // 修改编辑器内容变化处理函数，将内容存入localStorage而非直接保存到数据库
-    const onEditorChange = useCallback((value: () => string): void => {
-        // 存储到localStorage中的临时内容键名
-        const tempContentKey = `temp_content_${note?.id}`;
-        // 将内容存入localStorage
-        if (note?.id) {
-            localStorage.setItem(tempContentKey, value());
-            // 标记有未保存的更改
-            editMode.setHasUnsavedChanges(true);
-        }
-    }, [note?.id, editMode]);
-    const height = use100vh();
-    const mounted = useMounted();
-    const editorTheme = useEditorTheme();
-    const [hasMinHeight, setHasMinHeight] = useState(true);
-    const toast = useToast();
-    const dictionary = useDictionary();
-    const embeds = useEmbeds();
-
-    useEffect(() => {
-        if (isPreview) return;
-        setHasMinHeight((backlinks?.length ?? 0) <= 0);
-    }, [backlinks, isPreview]);
-    
     // 将光标移动到文档末尾的函数
     const moveCaretToEnd = useCallback(() => {
         if (!editorEl.current || !editorEl.current.view) return;
@@ -70,6 +46,18 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             console.error('设置光标位置失败:', error);
         }
     }, []);
+    const height = use100vh();
+    const mounted = useMounted();
+    const editorTheme = useEditorTheme();
+    const [hasMinHeight, setHasMinHeight] = useState(true);
+    const toast = useToast();
+    const dictionary = useDictionary();
+    const embeds = useEmbeds();
+
+    useEffect(() => {
+        if (isPreview) return;
+        setHasMinHeight((backlinks?.length ?? 0) <= 0);
+    }, [backlinks, isPreview]);
     
     // 修改编辑器内容变化处理函数，将内容存入localStorage并设置光标位置
     const onEditorChange = useCallback((value: () => string): void => {
