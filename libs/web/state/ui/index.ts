@@ -5,6 +5,7 @@ import useSettings from './settings';
 import useSidebar from './sidebar';
 import useSplit from './split';
 import useTitle from './title';
+import useEditMode from './edit-mode';
 
 const DEFAULT_UA: UserAgentType = {
     isMobile: false,
@@ -37,6 +38,7 @@ function useUI({
         split: useSplit(settings?.split_sizes),
         title: useTitle(),
         settings: useSettings(settings),
+        editMode: useEditMode(),
         disablePassword,
         IS_DEMO,
     };
