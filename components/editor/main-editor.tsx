@@ -7,7 +7,7 @@ import { FC, useCallback } from 'react';
 import { NoteModel } from 'libs/shared/note';
 import { EDITOR_SIZE } from 'libs/shared/meta';
 import NoteState from 'libs/web/state/note';
-import { Button } from '@chakra-ui/react';
+import { Button } from '@material-ui/core';
 
 const MainEditor: FC<
     EditorProps & {
