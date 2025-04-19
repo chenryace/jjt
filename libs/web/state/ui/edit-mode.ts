@@ -8,7 +8,7 @@ interface EditModeState {
 
 export default function useEditMode(initialState: Partial<EditModeState> = {}) {
     const [state, setState] = useState<EditModeState>({
-        isEditing: true, // 默认为编辑模式
+        isEditing: false, // 默认为预览模式
         hasUnsavedChanges: false,
         ...initialState,
     });
