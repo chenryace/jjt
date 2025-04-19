@@ -73,17 +73,18 @@ const MainEditor: FC<
                         <div className="flex space-x-2">
                             <Button 
                                 onClick={toggleMode}
-                                size="sm"
-                                colorScheme="blue"
-                                variant="outline"
+                                size="small"
+                                variant="outlined"
+                                color="primary"
                             >
                                 {editMode.isEditing ? '预览' : '编辑'}
                             </Button>
                             {editMode.isEditing && editMode.hasUnsavedChanges && (
                                 <Button 
                                     onClick={saveNote}
-                                    size="sm"
-                                    colorScheme="green"
+                                    size="small"
+                                    color="primary"
+                                    variant="contained"
                                 >
                                     保存
                                 </Button>
