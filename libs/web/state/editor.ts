@@ -161,7 +161,7 @@ const useEditor = (initNote?: NoteModel) => {
     }, [note?.id]);
 
     const onEditorChange = useCallback(
-        (value: () => string): void => {
+        (): void => {
             // 不再直接调用onNoteChange保存到数据库
             // 而是由main-editor中的保存按钮显式触发保存
             // 这里只负责更新编辑器内容
