@@ -89,7 +89,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                         // 分发事务
                         dispatch(tr);
                         // 确保编辑器获得焦点
-                        editorEl.current.focus();
+                        (editorEl.current as any).focus();
                         contentLoadedRef.current = true;
                     }
                 }
