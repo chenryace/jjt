@@ -1,4 +1,4 @@
-import { FC, useEffect, useState, useRef } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { use100vh } from 'react-div-100vh';
 import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
@@ -49,81 +49,51 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const dictionary = useDictionary();
     const embeds = useEmbeds();
 
-    // 跟踪编辑器是否已初始化
-    const [editorInitialized, setEditorInitialized] = useState(false);
-    // 跟踪内容是否已加载
-    const contentLoadedRef = useRef(false);
-    // 跟踪当前内容
-    const currentContentRef = useRef<string>('');
-
     useEffect(() => {
         if (isPreview) return;
         setHasMinHeight((backlinks?.length ?? 0) <= 0);
     }, [backlinks, isPreview]);
     
-    // 修复光标位置问题
-    useEffect(() => {
-        // 只在编辑模式下处理光标位置
-        if (!mounted || !editorEl.current || readOnly || !editMode.isEditing) return;
+    // 将光标移动到文档末尾的函数
+    const moveCaretToEnd = useCallback(() => {
+        if (!editorEl.current || !editorEl.current.view) return;
         
-        // 标记编辑器已初始化
-        if (!editorInitialized) {
-            setEditorInitialized(true);
-            return;
+        try {
+            const { view } = editorEl.current;
+            const { state, dispatch } = view;
+            const endPosition = state.doc.content.size;
+            const tr = state.tr.setSelection(state.selection.constructor.near(state.doc.resolve(endPosition)));
+            dispatch(tr);
+            // 确保视图更新并滚动到光标位置
+            view.focus();
+        } catch (error) {
+            console.error('设置光标位置失败:', error);
         }
-        
-        // 使用多个时间点尝试设置光标位置，增加成功率
-        const attemptToSetCursor = () => {
-            try {
-                if (editorEl.current) {
-                    // 使用类型断言访问view属性
-                    const view = (editorEl.current as any).view;
-                    if (view) {
-                        const { state, dispatch } = view;
-                        // 获取文档末尾位置
-                        const endPosition = state.doc.content.size;
-                        // 创建一个事务，将选择设置到文档末尾
-                        const tr = state.tr.setSelection(
-                            state.selection.constructor.near(state.doc.resolve(endPosition))
-                        );
-                        // 分发事务
-                        dispatch(tr);
-                        // 确保编辑器获得焦点
-                        (editorEl.current as any).focus();
-                        contentLoadedRef.current = true;
-                    }
-                }
-            } catch (error) {
-                console.error('设置光标位置失败:', error);
-            }
-        };
-        
-        // 立即尝试一次
-        attemptToSetCursor();
-        
-        // 然后在短暂延迟后再次尝试
-        const timer1 = setTimeout(attemptToSetCursor, 50);
-        // 再次尝试，以防前两次失败
-        const timer2 = setTimeout(attemptToSetCursor, 200);
-        
-        return () => {
-            clearTimeout(timer1);
-            clearTimeout(timer2);
-        };
-    }, [mounted, readOnly, editMode.isEditing, editorInitialized]);
-
-    // 获取编辑器内容
-    const getEditorContent = useCallback(() => {
-        if (!note?.id) return '';
-        
-        // 如果有临时内容，优先使用临时内容
-        const tempContent = localStorage.getItem(`temp_content_${note.id}`);
-        const content = tempContent || note?.content || '';
-        
-        // 更新当前内容引用
-        currentContentRef.current = content;
-        return content;
-    }, [note?.id, note?.content]);
+    }, []);
+    
+    // 修改编辑器内容变化处理函数，将内容存入localStorage并设置光标位置
+    const onEditorChange = useCallback((value: () => string): void => {
+        // 存储到localStorage中的临时内容键名
+        const tempContentKey = `temp_content_${note?.id}`;
+        // 将内容存入localStorage
+        if (note?.id) {
+            localStorage.setItem(tempContentKey, value());
+            // 标记有未保存的更改
+            editMode.setHasUnsavedChanges(true);
+            // 确保光标在文本末尾
+            setTimeout(moveCaretToEnd, 10);
+        }
+    }, [note?.id, editMode, moveCaretToEnd]);
+    
+    // 修复光标位置问题，确保光标在文本末尾
+    useEffect(() => {
+        if (mounted && editorEl.current && !readOnly && editMode.isEditing) {
+            // 延迟执行以确保编辑器已完全加载，增加延迟时间
+            const timer = setTimeout(moveCaretToEnd, 500); // 增加延迟时间，确保编辑器完全初始化
+            
+            return () => clearTimeout(timer); // 清理定时器
+        }
+    }, [mounted, readOnly, editMode.isEditing, note?.id, moveCaretToEnd]); // 添加note?.id作为依赖项，确保笔记切换时重新设置光标
 
     return (
         <>
@@ -131,7 +101,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 readOnly={readOnly || (!editMode.isEditing && !isPreview)}
                 id={note?.id}
                 ref={editorEl}
-                value={mounted ? getEditorContent() : ''}
+                value={mounted ? (() => {
+                    // 如果有临时内容，优先使用临时内容
+                    if (note?.id) {
+                        const tempContent = localStorage.getItem(`temp_content_${note.id}`);
+                        return tempContent || note?.content || '';
+                    }
+                    return note?.content || '';
+                })() : ''}
                 onChange={onEditorChange}
                 placeholder={dictionary.editorPlaceholder}
                 theme={editorTheme}
@@ -147,7 +124,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 className="px-4 md:px-0"
                 embeds={embeds}
                 defaultValue=""
-                autoFocus
+                autoFocus={editMode.isEditing} // 只在编辑模式下自动聚焦
             />
             <style jsx global>{`
                 .ProseMirror ul {
