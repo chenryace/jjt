@@ -1,11 +1,5 @@
 type AllowedEnvs =
     | 'PASSWORD'
-    | 'STORE_ACCESS_KEY'
-    | 'STORE_SECRET_KEY'
-    | 'STORE_BUCKET'
-    | 'STORE_END_POINT'
-    | 'STORE_REGION'
-    | 'STORE_FORCE_PATH_STYLE'
     | 'COOKIE_SECURE'
     | 'BASE_URL'
     | 'DISABLE_PASSWORD'
