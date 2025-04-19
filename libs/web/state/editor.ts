@@ -161,13 +161,11 @@ const useEditor = (initNote?: NoteModel) => {
     }, [note?.id]);
 
     const onEditorChange = useCallback(
-        (): void => {
-            // 不再直接调用onNoteChange保存到数据库
-            // 而是由main-editor中的保存按钮显式触发保存
-            // 这里只负责更新编辑器内容
-            // 实际的保存逻辑已移至editor.tsx中的onEditorChange函数
+        (value: () => string): void => {
+            onNoteChange.callback({ content: value() })
+                ?.catch((v) => console.error('Error whilst updating note: %O', v));
         },
-        []
+        [onNoteChange]
     );
 
     return {
