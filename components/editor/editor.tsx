@@ -9,6 +9,8 @@ import EditorState from 'libs/web/state/editor';
 import { useToast } from 'libs/web/hooks/use-toast';
 import { useDictionary } from './dictionary';
 import { useEmbeds } from './embeds';
+import UIState from 'libs/web/state/ui';
+import { useCallback } from 'react';
 
 export interface EditorProps extends Pick<Props, 'readOnly'> {
     isPreview?: boolean;
@@ -21,11 +23,24 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         onClickLink,
         onUploadImage,
         onHoverLink,
-        onEditorChange,
         backlinks,
         editorEl,
         note,
     } = EditorState.useContainer();
+    
+    const { editMode } = UIState.useContainer();
+    
+    // 修改编辑器内容变化处理函数，将内容存入localStorage而非直接保存到数据库
+    const onEditorChange = useCallback((value: () => string): void => {
+        // 存储到localStorage中的临时内容键名
+        const tempContentKey = `temp_content_${note?.id}`;
+        // 将内容存入localStorage
+        if (note?.id) {
+            localStorage.setItem(tempContentKey, value());
+            // 标记有未保存的更改
+            editMode.setHasUnsavedChanges(true);
+        }
+    }, [note?.id, editMode]);
     const height = use100vh();
     const mounted = useMounted();
     const editorTheme = useEditorTheme();
@@ -42,10 +57,17 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     return (
         <>
             <MarkdownEditor
-                readOnly={readOnly}
+                readOnly={readOnly || (!editMode.isEditing && !isPreview)}
                 id={note?.id}
                 ref={editorEl}
-                value={mounted ? note?.content : ''}
+                value={mounted ? (() => {
+                    // 如果有临时内容，优先使用临时内容
+                    if (note?.id) {
+                        const tempContent = localStorage.getItem(`temp_content_${note.id}`);
+                        return tempContent || note?.content || '';
+                    }
+                    return note?.content || '';
+                })() : ''}
                 onChange={onEditorChange}
                 placeholder={dictionary.editorPlaceholder}
                 theme={editorTheme}
