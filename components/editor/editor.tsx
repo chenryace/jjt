@@ -75,20 +75,23 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 使用多个时间点尝试设置光标位置，增加成功率
         const attemptToSetCursor = () => {
             try {
-                const { view } = editorEl.current;
-                if (view) {
-                    const { state, dispatch } = view;
-                    // 获取文档末尾位置
-                    const endPosition = state.doc.content.size;
-                    // 创建一个事务，将选择设置到文档末尾
-                    const tr = state.tr.setSelection(
-                        state.selection.constructor.near(state.doc.resolve(endPosition))
-                    );
-                    // 分发事务
-                    dispatch(tr);
-                    // 确保编辑器获得焦点
-                    editorEl.current.focus();
-                    contentLoadedRef.current = true;
+                if (editorEl.current) {
+                    // 使用类型断言访问view属性
+                    const view = (editorEl.current as any).view;
+                    if (view) {
+                        const { state, dispatch } = view;
+                        // 获取文档末尾位置
+                        const endPosition = state.doc.content.size;
+                        // 创建一个事务，将选择设置到文档末尾
+                        const tr = state.tr.setSelection(
+                            state.selection.constructor.near(state.doc.resolve(endPosition))
+                        );
+                        // 分发事务
+                        dispatch(tr);
+                        // 确保编辑器获得焦点
+                        editorEl.current.focus();
+                        contentLoadedRef.current = true;
+                    }
                 }
             } catch (error) {
                 console.error('设置光标位置失败:', error);
