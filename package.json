@@ -2,6 +2,9 @@
     "name": "notea",
     "version": "0.4.0-alpha",
     "private": true,
+    "engines": {
+        "node": "18.x"
+        },
     "scripts": {
         "dev": "next",
         "debug": "NODE_OPTIONS='--inspect' next dev",
@@ -60,6 +63,7 @@
         "next-connect": "^0.10.1",
         "next-iron-session": "^4.1.11",
         "next-seo": "^4.24.0",
+        "pg": "^8.14.1",
         "next-themes": "^0.0.14",
         "notistack": "^1.0.7",
         "outline-icons": "^1.27.0",
@@ -90,6 +94,7 @@
         "@types/jest": "^27.0.1",
         "@types/js-yaml": "^4.0.5",
         "@types/lodash": "^4.14.168",
+        "@types/pg": "^8.10.9",
         "@types/md5": "^2.3.0",
         "@types/minio": "^7.0.7",
         "@types/node": "^12.12.21",
