@@ -3,11 +3,9 @@ import Editor, { EditorProps } from './editor';
 import Backlinks from './backlinks';
 import EditorState from 'libs/web/state/editor';
 import UIState from 'libs/web/state/ui';
-import { FC, useCallback } from 'react';
+import { FC } from 'react';
 import { NoteModel } from 'libs/shared/note';
 import { EDITOR_SIZE } from 'libs/shared/meta';
-import NoteState from 'libs/web/state/note';
-import { Button } from '@material-ui/core';
 
 const MainEditor: FC<
     EditorProps & {
@@ -18,9 +16,7 @@ const MainEditor: FC<
 > = ({ className, note, isPreview, ...props }) => {
     const {
         settings: { settings },
-        editMode,
     } = UIState.useContainer();
-    const { updateNote } = NoteState.useContainer();
     let editorWidthClass: string;
     switch (note?.editorsize ?? settings.editorsize) {
         case EDITOR_SIZE.SMALL:
@@ -37,77 +33,10 @@ const MainEditor: FC<
     const articleClassName =
         className || `pt-16 md:pt-40 px-6 m-auto h-full ${editorWidthClass}`;
 
-    // 保存笔记内容到数据库
-    const saveNote = useCallback(async () => {
-        if (!note?.id) return;
-        
-        // 从localStorage获取临时内容
-        const tempContentKey = `temp_content_${note.id}`;
-        const tempContent = localStorage.getItem(tempContentKey);
-        
-        if (tempContent) {
-            try {
-                // 保存到数据库
-                await updateNote({ content: tempContent });
-                // 标记没有未保存的更改
-                editMode.setHasUnsavedChanges(false);
-                // 不删除localStorage中的内容，避免重置编辑器状态
-            } catch (error) {
-                console.error('保存笔记失败:', error);
-            }
-        }
-    }, [note?.id, updateNote, editMode]);
-
-    // 进入编辑模式
-    const enterEditMode = useCallback(() => {
-        editMode.setEditMode();
-    }, [editMode]);
-    
-    // 保存并返回预览模式
-    const saveAndReturnToPreview = useCallback(() => {
-        saveNote();
-        editMode.setPreviewMode();
-    }, [editMode, saveNote]);
-
     return (
         <EditorState.Provider initialState={note}>
             <article className={articleClassName}>
-                <div className="flex justify-between items-center mb-4">
-                    <EditTitle readOnly={props.readOnly} />
-                    {!props.readOnly && !isPreview && (
-                        <div className="flex space-x-2">
-                            {!editMode.isEditing ? (
-                                <Button 
-                                    onClick={enterEditMode}
-                                    size="small"
-                                    variant="outlined"
-                                    color="primary"
-                                >
-                                    编辑
-                                </Button>
-                            ) : (
-                                <>
-                                    <Button 
-                                        onClick={saveAndReturnToPreview}
-                                        size="small"
-                                        color="primary"
-                                        variant="contained"
-                                        disabled={!editMode.hasUnsavedChanges}
-                                    >
-                                        保存
-                                    </Button>
-                                    <Button 
-                                        onClick={editMode.setPreviewMode}
-                                        size="small"
-                                        variant="outlined"
-                                    >
-                                        取消
-                                    </Button>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </div>
+                <EditTitle readOnly={props.readOnly} />
                 <Editor isPreview={isPreview} {...props} />
                 {!isPreview && <Backlinks />}
             </article>
