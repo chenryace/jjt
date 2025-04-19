@@ -55,13 +55,15 @@ const MainEditor: FC<
         }
     }, [note?.id, updateNote, editMode]);
 
-    // 切换编辑/预览模式
-    const toggleMode = useCallback(() => {
-        // 如果从编辑模式切换到预览模式，自动保存
-        if (editMode.isEditing && editMode.hasUnsavedChanges) {
-            saveNote();
-        }
-        editMode.toggleEditMode();
+    // 进入编辑模式
+    const enterEditMode = useCallback(() => {
+        editMode.setEditMode();
+    }, [editMode]);
+    
+    // 保存并返回预览模式
+    const saveAndReturnToPreview = useCallback(() => {
+        saveNote();
+        editMode.setPreviewMode();
     }, [editMode, saveNote]);
 
     return (
@@ -71,23 +73,33 @@ const MainEditor: FC<
                     <EditTitle readOnly={props.readOnly} />
                     {!props.readOnly && !isPreview && (
                         <div className="flex space-x-2">
-                            <Button 
-                                onClick={toggleMode}
-                                size="small"
-                                variant="outlined"
-                                color="primary"
-                            >
-                                {editMode.isEditing ? '预览' : '编辑'}
-                            </Button>
-                            {editMode.isEditing && editMode.hasUnsavedChanges && (
+                            {!editMode.isEditing ? (
                                 <Button 
-                                    onClick={saveNote}
+                                    onClick={enterEditMode}
                                     size="small"
+                                    variant="outlined"
                                     color="primary"
-                                    variant="contained"
                                 >
-                                    保存
+                                    编辑
                                 </Button>
+                            ) : (
+                                <>
+                                    <Button 
+                                        onClick={saveAndReturnToPreview}
+                                        size="small"
+                                        color="primary"
+                                        variant="contained"
+                                    >
+                                        保存
+                                    </Button>
+                                    <Button 
+                                        onClick={editMode.setPreviewMode}
+                                        size="small"
+                                        variant="outlined"
+                                    >
+                                        取消
+                                    </Button>
+                                </>
                             )}
                         </div>
                     )}
