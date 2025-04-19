@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useState, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
 import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
@@ -53,6 +53,27 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (isPreview) return;
         setHasMinHeight((backlinks?.length ?? 0) <= 0);
     }, [backlinks, isPreview]);
+    
+    // 修复光标位置问题，确保光标在文本末尾
+    useEffect(() => {
+        if (mounted && editorEl.current && !readOnly && editMode.isEditing) {
+            // 延迟执行以确保编辑器已完全加载
+            setTimeout(() => {
+                try {
+                    // 将光标移动到文档末尾
+                    const { view } = editorEl.current;
+                    if (view) {
+                        const { state, dispatch } = view;
+                        const endPosition = state.doc.content.size;
+                        const tr = state.tr.setSelection(state.selection.constructor.near(state.doc.resolve(endPosition)));
+                        dispatch(tr);
+                    }
+                } catch (error) {
+                    console.error('设置光标位置失败:', error);
+                }
+            }, 100);
+        }
+    }, [mounted, readOnly, editMode.isEditing]);
 
     return (
         <>
@@ -82,6 +103,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 extensions={extensions}
                 className="px-4 md:px-0"
                 embeds={embeds}
+                defaultValue=""
+                autoFocus
             />
             <style jsx global>{`
                 .ProseMirror ul {
