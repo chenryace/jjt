@@ -42,20 +42,16 @@ const MainEditor: FC<
         if (!note?.id) return;
         
         // 从localStorage获取临时内容
-        const editorContentKey = `editor_content_${note.id}`;
-        const tempContent = localStorage.getItem(editorContentKey);
+        const tempContentKey = `temp_content_${note.id}`;
+        const tempContent = localStorage.getItem(tempContentKey);
         
         if (tempContent) {
-            try {
-                // 保存到数据库
-                await updateNote({ content: tempContent });
-                // 清除临时内容标记
-                // 注意：我们不删除localStorage中的内容，这样可以避免保存后光标位置重置
-                // 只是标记没有未保存的更改
-                editMode.setHasUnsavedChanges(false);
-            } catch (error) {
-                console.error('保存笔记失败:', error);
-            }
+            // 保存到数据库
+            await updateNote({ content: tempContent });
+            // 清除临时内容
+            localStorage.removeItem(tempContentKey);
+            // 标记没有未保存的更改
+            editMode.setHasUnsavedChanges(false);
         }
     }, [note?.id, updateNote, editMode]);
 
@@ -69,20 +65,6 @@ const MainEditor: FC<
         saveNote();
         editMode.setPreviewMode();
     }, [editMode, saveNote]);
-    
-    // 自动保存功能 - 每30秒自动保存一次
-    useEffect(() => {
-        if (!note?.id || !editMode.isEditing || !editMode.hasUnsavedChanges) return;
-        
-        const autoSaveInterval = 30000; // 30秒
-        const timerId = setInterval(() => {
-            if (editMode.hasUnsavedChanges) {
-                saveNote();
-            }
-        }, autoSaveInterval);
-        
-        return () => clearInterval(timerId);
-    }, [note?.id, editMode.isEditing, editMode.hasUnsavedChanges, saveNote]);
 
     return (
         <EditorState.Provider initialState={note}>
@@ -107,7 +89,6 @@ const MainEditor: FC<
                                         size="small"
                                         color="primary"
                                         variant="contained"
-                                        disabled={!editMode.hasUnsavedChanges}
                                     >
                                         保存
                                     </Button>
