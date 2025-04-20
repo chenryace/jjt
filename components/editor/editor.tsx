@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useState, useCallback } from 'react';
 import { use100vh } from 'react-div-100vh';
 import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
@@ -25,6 +25,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         backlinks,
         editorEl,
         note,
+        setIsComposing, // 使用新增的setIsComposing函数
     } = EditorState.useContainer();
     const height = use100vh();
     const mounted = useMounted();
@@ -38,6 +39,36 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (isPreview) return;
         setHasMinHeight((backlinks?.length ?? 0) <= 0);
     }, [backlinks, isPreview]);
+
+    // 添加组合事件处理函数
+    const handleCompositionStart = useCallback(() => {
+        console.log('输入法组合开始');
+        setIsComposing(true);
+    }, [setIsComposing]);
+
+    const handleCompositionEnd = useCallback(() => {
+        console.log('输入法组合结束');
+        setIsComposing(false);
+    }, [setIsComposing]);
+
+    // 添加编辑器DOM引用的事件监听
+    useEffect(() => {
+        if (!editorEl.current || isPreview || readOnly) return;
+
+        // 获取编辑器的DOM元素
+        const editorDom = editorEl.current.element;
+        if (!editorDom) return;
+
+        // 添加组合事件监听
+        editorDom.addEventListener('compositionstart', handleCompositionStart);
+        editorDom.addEventListener('compositionend', handleCompositionEnd);
+
+        return () => {
+            // 清理事件监听
+            editorDom.removeEventListener('compositionstart', handleCompositionStart);
+            editorDom.removeEventListener('compositionend', handleCompositionEnd);
+        };
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd]);
 
     return (
         <>
