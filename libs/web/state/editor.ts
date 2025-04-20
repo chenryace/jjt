@@ -279,10 +279,8 @@ const useEditor = (initNote?: NoteModel) => {
             localStorage.removeItem(`note_title_${note.id}`);
         }
         
-        // 更新编辑器内容
-        if (editorEl.current && note.content) {
-            editorEl.current.updateContent(note.content);
-        }
+        // 不再尝试直接更新编辑器内容，而是依赖于组件重新渲染
+        // 当localContent更新后，编辑器会自动使用新的内容
         
         toast('已丢弃更改', 'info');
     }, [note, toast]);
