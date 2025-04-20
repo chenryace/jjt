@@ -14,7 +14,6 @@ import useI18n from 'libs/web/hooks/use-i18n';
 import NavButtonGroup from './nav-button-group';
 import { EyeIcon } from '@heroicons/react/outline';
 import EditorState from 'libs/web/state/editor';
-import { SaveIcon, XIcon } from '@heroicons/react/outline';
 
 const MenuButton = () => {
     const { sidebar } = UIState.useContainer();
