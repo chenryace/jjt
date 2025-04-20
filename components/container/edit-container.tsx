@@ -10,6 +10,7 @@ import useSettingsAPI from 'libs/web/api/settings';
 import dynamic from 'next/dynamic';
 import { useToast } from 'libs/web/hooks/use-toast';
 import DeleteAlert from 'components/editor/delete-alert';
+import EditorState from 'libs/web/state/editor';
 
 const MainEditor = dynamic(() => import('components/editor/main-editor'));
 
@@ -21,6 +22,7 @@ export const EditContainer = () => {
     const { genNewId } = NoteTreeState.useContainer();
     const { fetchNote, abortFindNote, findOrCreateNote, initNote, note } =
         NoteState.useContainer();
+    const { saveNote, hasLocalChanges } = EditorState.useContainer();
     const { query } = useRouter();
     const pid = query.pid as string;
     const id = query.id as string;
@@ -96,6 +98,38 @@ export const EditContainer = () => {
     useEffect(() => {
         updateTitle(note?.title);
     }, [note?.title, updateTitle]);
+    
+    // 添加键盘快捷键支持
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // 添加Ctrl+S (或Mac上的Cmd+S)快捷键
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (hasLocalChanges) {
+                    saveNote()
+                        .catch(error => console.error('保存失败', error));
+                }
+            }
+        };
+        
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [hasLocalChanges, saveNote]);
+    
+    // 添加页面离开提示
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (hasLocalChanges) {
+                // 显示标准的"离开页面"提示
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            }
+        };
+        
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasLocalChanges]);
 
     return (
         <>
