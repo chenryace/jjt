@@ -46,22 +46,8 @@ const NoteNav = () => {
         NoteTreeState.useContainer();
     const { share, menu, editorWidthSelect } = PortalState.useContainer();
     
-    // 移除对EditorState的直接使用
+    // 移除对EditorState的直接使用和所有未使用的函数
     // const { saveNote, hasLocalChanges, discardChanges } = EditorState.useContainer();
-    
-    // 创建空的占位函数，这样组件不会报错
-    // 实际的保存功能将在EditorContent组件中实现
-    // 移除未使用的hasLocalChanges状态
-    const saveNote = useCallback(async () => {
-        // 这个函数不会被实际调用，因为按钮会被禁用
-        console.log('Save function not available in NoteNav');
-        return false;
-    }, []);
-    
-    const discardChanges = useCallback(() => {
-        // 这个函数不会被实际调用，因为按钮会被禁用
-        console.log('Discard function not available in NoteNav');
-    }, []);
 
     const handleClickShare = useCallback(
         (event: MouseEvent) => {
@@ -95,24 +81,6 @@ const NoteNav = () => {
         if (!note) return;
         showItem(note);
     }, [note, showItem]);
-    
-    // 保存按钮点击处理（占位函数）
-    const handleClickSave = useCallback(
-        async (event: MouseEvent) => {
-            event.stopPropagation();
-            await saveNote();
-        },
-        [saveNote]
-    );
-    
-    // 丢弃更改按钮点击处理（占位函数）
-    const handleClickDiscard = useCallback(
-        (event: MouseEvent) => {
-            event.stopPropagation();
-            discardChanges();
-        },
-        [discardChanges]
-    );
 
     return (
         <nav
