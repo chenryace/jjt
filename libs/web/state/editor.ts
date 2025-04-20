@@ -21,6 +21,7 @@ import { useDebouncedCallback } from 'use-debounce';
 import { ROOT_ID } from 'libs/shared/tree';
 import { has } from 'lodash';
 import UIState from './ui';
+import NoteTreeState from './tree';
 
 const onSearchLink = async (keyword: string) => {
     const list = await searchNote(keyword, NOTE_DELETED.NORMAL);
@@ -52,6 +53,7 @@ const useEditor = (initNote?: NoteModel) => {
     const { request, error } = useFetcher();
     const toast = useToast();
     const editorEl = useRef<MarkdownEditor>(null);
+    const treeState = NoteTreeState.useContainer();
     
     // 添加本地更改状态
     const [hasLocalChanges, setHasLocalChanges] = useState<boolean>(false);
@@ -222,20 +224,25 @@ const useEditor = (initNote?: NoteModel) => {
         [note]
     );
     
-    // 添加手动保存函数
+    // 添加手动保存函数，确保更新元数据和树结构
     const saveNote = useCallback(async () => {
         if (!note?.id) return false;
         
         try {
+            console.log('保存笔记', { id: note?.id, localContent, localTitle });
+            
             // 对于新笔记的特殊处理
             const isNew = has(router.query, 'new');
             if (isNew) {
+                // 确保包含必要的元数据，特别是日期和pid
                 const data = {
                     content: localContent,
                     title: localTitle,
-                    pid: (router.query.pid as string) || ROOT_ID
+                    pid: (router.query.pid as string) || ROOT_ID,
+                    date: new Date().toISOString() // 添加日期元数据
                 };
                 
+                console.log('创建新笔记', data);
                 const item = await createNote({ ...note, ...data });
                 const noteUrl = `/${item?.id}`;
                 
@@ -243,15 +250,29 @@ const useEditor = (initNote?: NoteModel) => {
                     await router.replace(noteUrl, undefined, { shallow: true });
                 }
             } else {
-                // 保存现有笔记
+                // 保存现有笔记，确保包含日期元数据
+                console.log('更新现有笔记', { content: localContent, title: localTitle });
                 await updateNote({
                     content: localContent,
-                    title: localTitle
+                    title: localTitle,
+                    date: new Date().toISOString() // 添加日期元数据
                 });
             }
             
             // 清除本地更改标记
             setHasLocalChanges(false);
+            
+            // 清除localStorage
+            if (note.id) {
+                localStorage.removeItem(`note_content_${note.id}`);
+                localStorage.removeItem(`note_title_${note.id}`);
+            }
+            
+            // 保存成功后，刷新树结构以确保侧栏正确显示
+            if (treeState && typeof treeState.initTree === 'function') {
+                console.log('刷新树结构');
+                await treeState.initTree();
+            }
             
             // 显示保存成功提示
             toast('保存成功', 'success');
@@ -262,7 +283,26 @@ const useEditor = (initNote?: NoteModel) => {
             toast('保存失败，请重试', 'error');
             return false;
         }
-    }, [note, localContent, localTitle, updateNote, createNote, router, toast]);
+    }, [note, localContent, localTitle, updateNote, createNote, router, toast, treeState]);
+    
+    // 添加带重试的保存函数
+    const saveNoteWithRetry = useCallback(async (retryCount = 3) => {
+        for (let i = 0; i < retryCount; i++) {
+            try {
+                const result = await saveNote();
+                if (result) return true;
+            } catch (error) {
+                console.error(`保存失败，尝试重试 (${i+1}/${retryCount})`, error);
+                if (i === retryCount - 1) {
+                    toast('保存失败，请手动刷新页面后重试', 'error');
+                    return false;
+                }
+                // 等待一段时间后重试
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        return false;
+    }, [saveNote, toast]);
     
     // 添加丢弃更改函数
     const discardChanges = useCallback(() => {
@@ -278,9 +318,6 @@ const useEditor = (initNote?: NoteModel) => {
             localStorage.removeItem(`note_content_${note.id}`);
             localStorage.removeItem(`note_title_${note.id}`);
         }
-        
-        // 不再尝试直接更新编辑器内容，而是依赖于组件重新渲染
-        // 当localContent更新后，编辑器会自动使用新的内容
         
         toast('已丢弃更改', 'info');
     }, [note, toast]);
@@ -299,6 +336,7 @@ const useEditor = (initNote?: NoteModel) => {
         note,
         // 新增的手动保存相关函数和状态
         saveNote,
+        saveNoteWithRetry,
         discardChanges,
         hasLocalChanges,
         localContent,
