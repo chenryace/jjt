@@ -1,4 +1,3 @@
-import { NoteModel } from 'libs/shared/note';
 import { useRouter } from 'next/router';
 import {
     useCallback,
@@ -62,9 +61,6 @@ const useEditor = (initNote?: NoteModel) => {
     
     // 添加编辑器渲染状态
     const [editorKey, setEditorKey] = useState<number>(0);
-    
-    // 添加组合输入状态
-    const [isComposing, setIsComposing] = useState<boolean>(false);
     
     // 初始化本地内容，优化缓存处理
     useEffect(() => {
@@ -216,57 +212,44 @@ const useEditor = (initNote?: NoteModel) => {
         setBackLinks(linkNotes);
     }, [note?.id]);
 
-    // 修改为考虑组合输入状态的版本
+    // 修改为不再自动保存的版本
     const onEditorChange = useCallback(
         (value: () => string): void => {
             const newContent = value();
-            console.log('编辑器内容变更', { length: newContent.length, isComposing });
+            console.log('编辑器内容变更', { length: newContent.length });
             
-            // 只在非组合输入状态下更新本地存储
-            if (!isComposing) {
-                // 更新本地状态
-                setLocalContent(newContent);
-                setHasLocalChanges(true);
-                
-                // 保存到localStorage作为备份
-                if (note?.id) {
-                    localStorage.setItem(`note_content_${note.id}`, newContent);
-                }
+            // 更新本地状态
+            setLocalContent(newContent);
+            setHasLocalChanges(true);
+            
+            // 保存到localStorage作为备份
+            if (note?.id) {
+                localStorage.setItem(`note_content_${note.id}`, newContent);
             }
         },
-        [note, isComposing]
+        [note]
     );
     
-    // 添加标题变更处理，考虑组合输入状态
+    // 添加标题变更处理
     const onTitleChange = useCallback(
         (title: string): void => {
-            console.log('标题变更', { title, isComposing });
+            console.log('标题变更', { title });
             
-            // 只在非组合输入状态下更新本地存储
-            if (!isComposing) {
-                // 更新本地状态
-                setLocalTitle(title);
-                setHasLocalChanges(true);
-                
-                // 保存到localStorage作为备份
-                if (note?.id) {
-                    localStorage.setItem(`note_title_${note.id}`, title);
-                }
+            // 更新本地状态
+            setLocalTitle(title);
+            setHasLocalChanges(true);
+            
+            // 保存到localStorage作为备份
+            if (note?.id) {
+                localStorage.setItem(`note_title_${note.id}`, title);
             }
         },
-        [note, isComposing]
+        [note]
     );
     
     // 添加手动保存函数，确保更新元数据和树结构
     const saveNote = useCallback(async () => {
         if (!note?.id) return false;
-        
-        // 如果正在组合输入，等待组合输入完成
-        if (isComposing) {
-            console.log('正在组合输入中，等待输入完成后保存');
-            toast('请完成当前输入后再保存', 'info');
-            return false;
-        }
         
         try {
             console.log('保存笔记', { id: note?.id, localContent, localTitle });
@@ -326,7 +309,7 @@ const useEditor = (initNote?: NoteModel) => {
             toast('保存失败，请重试', 'error');
             return false;
         }
-    }, [note, localContent, localTitle, updateNote, createNote, router, toast, treeState, isComposing]);
+    }, [note, localContent, localTitle, updateNote, createNote, router, toast, treeState]);
     
     // 添加带重试的保存函数
     const saveNoteWithRetry = useCallback(async (retryCount = 3) => {
@@ -351,13 +334,6 @@ const useEditor = (initNote?: NoteModel) => {
     const discardChanges = useCallback(() => {
         if (!note) return;
         
-        // 如果正在组合输入，等待组合输入完成
-        if (isComposing) {
-            console.log('正在组合输入中，等待输入完成后丢弃更改');
-            toast('请完成当前输入后再丢弃更改', 'info');
-            return;
-        }
-        
         console.log('丢弃更改', { id: note.id });
         
         // 恢复到原始内容
@@ -375,7 +351,7 @@ const useEditor = (initNote?: NoteModel) => {
         setEditorKey(prev => prev + 1);
         
         toast('已丢弃更改', 'info');
-    }, [note, toast, isComposing]);
+    }, [note, toast]);
     
     // 添加强制重新渲染函数
     const forceRender = useCallback(() => {
@@ -405,12 +381,7 @@ const useEditor = (initNote?: NoteModel) => {
         onTitleChange,
         // 编辑器渲染相关
         editorKey,
-        forceRender,
-        // 组合输入状态
-        isComposing,
-        setIsComposing,
-        // 缓存管理
-        clearIrrelevantCache
+        forceRender
     };
 };
 
