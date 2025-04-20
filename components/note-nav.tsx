@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import NoteState from 'libs/web/state/note';
 import UIState from 'libs/web/state/ui';
-import { useCallback, MouseEvent, useState } from 'react';
+import { useCallback, MouseEvent } from 'react';
 import { CircularProgress, Tooltip } from '@material-ui/core';
 import NoteTreeState from 'libs/web/state/tree';
 import { Breadcrumbs } from '@material-ui/core';
@@ -49,9 +49,9 @@ const NoteNav = () => {
     // 移除对EditorState的直接使用
     // const { saveNote, hasLocalChanges, discardChanges } = EditorState.useContainer();
     
-    // 创建一个空的占位函数和状态，这样组件不会报错
+    // 创建空的占位函数，这样组件不会报错
     // 实际的保存功能将在EditorContent组件中实现
-    const [hasLocalChanges] = useState(false);
+    // 移除未使用的hasLocalChanges状态
     const saveNote = useCallback(async () => {
         // 这个函数不会被实际调用，因为按钮会被禁用
         console.log('Save function not available in NoteNav');
@@ -181,37 +181,7 @@ const NoteNav = () => {
                 </style>
             </div>
             
-            {/* 保存状态指示器 - 暂时隐藏，将在EditorNavButtons组件中实现 */}
-            {/* {hasLocalChanges && (
-                <div className="mr-2 text-xs text-red-500 font-medium">
-                    未保存
-                </div>
-            )} */}
-            
-            {/* 保存按钮 - 暂时隐藏，将在EditorNavButtons组件中实现 */}
-            {/* <HotkeyTooltip text={t('保存笔记 (Ctrl+S)')}>
-                <IconButton
-                    onClick={handleClickSave}
-                    className={classNames("mr-2", {
-                        "text-blue-500": hasLocalChanges,
-                        "animate-pulse": hasLocalChanges
-                    })}
-                    disabled={!note || !hasLocalChanges}
-                    icon="DocumentText"
-                />
-            </HotkeyTooltip> */}
-            
-            {/* 丢弃更改按钮 - 暂时隐藏，将在EditorNavButtons组件中实现 */}
-            {/* {hasLocalChanges && (
-                <HotkeyTooltip text={t('丢弃更改')}>
-                    <IconButton
-                        onClick={handleClickDiscard}
-                        className="mr-2"
-                        disabled={!note || !hasLocalChanges}
-                        icon="Trash"
-                    />
-                </HotkeyTooltip>
-            )} */}
+            {/* 保存状态指示器和按钮已移至EditorNavButtons组件中实现 */}
             
             <div
                 className={classNames(
