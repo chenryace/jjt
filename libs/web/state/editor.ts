@@ -5,6 +5,7 @@ import {
     MouseEvent as ReactMouseEvent,
     useState,
     useRef,
+    useEffect,
 } from 'react';
 import { searchNote, searchRangeText } from 'libs/web/utils/search';
 import useFetcher from 'libs/web/api/fetcher';
@@ -51,6 +52,36 @@ const useEditor = (initNote?: NoteModel) => {
     const { request, error } = useFetcher();
     const toast = useToast();
     const editorEl = useRef<MarkdownEditor>(null);
+    
+    // 添加本地更改状态
+    const [hasLocalChanges, setHasLocalChanges] = useState<boolean>(false);
+    const [localContent, setLocalContent] = useState<string>('');
+    const [localTitle, setLocalTitle] = useState<string>('');
+    
+    // 初始化本地内容
+    useEffect(() => {
+        if (note) {
+            setLocalContent(note.content || '');
+            setLocalTitle(note.title || '');
+            setHasLocalChanges(false);
+            
+            // 检查localStorage中是否有未保存的内容
+            if (note.id) {
+                const savedContent = localStorage.getItem(`note_content_${note.id}`);
+                const savedTitle = localStorage.getItem(`note_title_${note.id}`);
+                
+                if (savedContent && savedContent !== note.content) {
+                    setLocalContent(savedContent);
+                    setHasLocalChanges(true);
+                }
+                
+                if (savedTitle && savedTitle !== note.title) {
+                    setLocalTitle(savedTitle);
+                    setHasLocalChanges(true);
+                }
+            }
+        }
+    }, [note]);
 
     const onNoteChange = useDebouncedCallback(
         async (data: Partial<NoteModel>) => {
@@ -160,13 +191,101 @@ const useEditor = (initNote?: NoteModel) => {
         setBackLinks(linkNotes);
     }, [note?.id]);
 
+    // 修改为不再自动保存的版本
     const onEditorChange = useCallback(
         (value: () => string): void => {
-            onNoteChange.callback({ content: value() })
-                ?.catch((v) => console.error('Error whilst updating note: %O', v));
+            const newContent = value();
+            // 只更新本地状态，不调用保存
+            setLocalContent(newContent);
+            setHasLocalChanges(true);
+            
+            // 保存到localStorage作为备份
+            if (note?.id) {
+                localStorage.setItem(`note_content_${note.id}`, newContent);
+            }
         },
-        [onNoteChange]
+        [note]
     );
+    
+    // 添加标题变更处理
+    const onTitleChange = useCallback(
+        (title: string): void => {
+            // 只更新本地状态，不调用保存
+            setLocalTitle(title);
+            setHasLocalChanges(true);
+            
+            // 保存到localStorage作为备份
+            if (note?.id) {
+                localStorage.setItem(`note_title_${note.id}`, title);
+            }
+        },
+        [note]
+    );
+    
+    // 添加手动保存函数
+    const saveNote = useCallback(async () => {
+        if (!note?.id) return false;
+        
+        try {
+            // 对于新笔记的特殊处理
+            const isNew = has(router.query, 'new');
+            if (isNew) {
+                const data = {
+                    content: localContent,
+                    title: localTitle,
+                    pid: (router.query.pid as string) || ROOT_ID
+                };
+                
+                const item = await createNote({ ...note, ...data });
+                const noteUrl = `/${item?.id}`;
+                
+                if (router.asPath !== noteUrl) {
+                    await router.replace(noteUrl, undefined, { shallow: true });
+                }
+            } else {
+                // 保存现有笔记
+                await updateNote({
+                    content: localContent,
+                    title: localTitle
+                });
+            }
+            
+            // 清除本地更改标记
+            setHasLocalChanges(false);
+            
+            // 显示保存成功提示
+            toast('保存成功', 'success');
+            
+            return true;
+        } catch (error) {
+            console.error('保存失败', error);
+            toast('保存失败，请重试', 'error');
+            return false;
+        }
+    }, [note, localContent, localTitle, updateNote, createNote, router, toast]);
+    
+    // 添加丢弃更改函数
+    const discardChanges = useCallback(() => {
+        if (!note) return;
+        
+        // 恢复到原始内容
+        setLocalContent(note.content || '');
+        setLocalTitle(note.title || '');
+        setHasLocalChanges(false);
+        
+        // 清除localStorage
+        if (note.id) {
+            localStorage.removeItem(`note_content_${note.id}`);
+            localStorage.removeItem(`note_title_${note.id}`);
+        }
+        
+        // 更新编辑器内容
+        if (editorEl.current && note.content) {
+            editorEl.current.updateContent(note.content);
+        }
+        
+        toast('已丢弃更改', 'info');
+    }, [note, toast]);
 
     return {
         onCreateLink,
@@ -180,6 +299,13 @@ const useEditor = (initNote?: NoteModel) => {
         backlinks,
         editorEl,
         note,
+        // 新增的手动保存相关函数和状态
+        saveNote,
+        discardChanges,
+        hasLocalChanges,
+        localContent,
+        localTitle,
+        onTitleChange
     };
 };
 
