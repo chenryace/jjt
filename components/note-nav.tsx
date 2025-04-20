@@ -13,6 +13,8 @@ import { NOTE_SHARED } from 'libs/shared/meta';
 import useI18n from 'libs/web/hooks/use-i18n';
 import NavButtonGroup from './nav-button-group';
 import { EyeIcon } from '@heroicons/react/outline';
+import EditorState from 'libs/web/state/editor';
+import { SaveIcon, XIcon } from '@heroicons/react/outline';
 
 const MenuButton = () => {
     const { sidebar } = UIState.useContainer();
@@ -42,6 +44,9 @@ const NoteNav = () => {
     const { getPaths, showItem, checkItemIsShown } =
         NoteTreeState.useContainer();
     const { share, menu, editorWidthSelect } = PortalState.useContainer();
+    
+    // 添加编辑器状态
+    const { saveNote, hasLocalChanges, discardChanges } = EditorState.useContainer();
 
     const handleClickShare = useCallback(
         (event: MouseEvent) => {
@@ -61,6 +66,7 @@ const NoteNav = () => {
         },
         [note, menu]
     );
+    
     const handleClickEditorWidth = useCallback(
         (event: MouseEvent) => {
             editorWidthSelect.setData(note);
@@ -74,6 +80,26 @@ const NoteNav = () => {
         if (!note) return;
         showItem(note);
     }, [note, showItem]);
+    
+    // 添加保存按钮点击处理
+    const handleClickSave = useCallback(
+        async (event: MouseEvent) => {
+            event.stopPropagation();
+            await saveNote();
+        },
+        [saveNote]
+    );
+    
+    // 添加丢弃更改按钮点击处理
+    const handleClickDiscard = useCallback(
+        (event: MouseEvent) => {
+            event.stopPropagation();
+            if (window.confirm('确定要丢弃所有未保存的更改吗？')) {
+                discardChanges();
+            }
+        },
+        [discardChanges]
+    );
 
     return (
         <nav
@@ -141,6 +167,39 @@ const NoteNav = () => {
                     `}
                 </style>
             </div>
+            
+            {/* 添加保存状态指示器 */}
+            {hasLocalChanges && (
+                <div className="mr-2 text-xs text-red-500 font-medium">
+                    未保存
+                </div>
+            )}
+            
+            {/* 添加保存按钮 */}
+            <HotkeyTooltip text={t('保存笔记 (Ctrl+S)')}>
+                <IconButton
+                    onClick={handleClickSave}
+                    className={classNames("mr-2", {
+                        "text-blue-500": hasLocalChanges,
+                        "animate-pulse": hasLocalChanges
+                    })}
+                    disabled={!note || !hasLocalChanges}
+                    icon="Save"
+                />
+            </HotkeyTooltip>
+            
+            {/* 添加丢弃更改按钮 */}
+            {hasLocalChanges && (
+                <HotkeyTooltip text={t('丢弃更改')}>
+                    <IconButton
+                        onClick={handleClickDiscard}
+                        className="mr-2"
+                        disabled={!note || !hasLocalChanges}
+                        icon="X"
+                    />
+                </HotkeyTooltip>
+            )}
+            
             <div
                 className={classNames(
                     'flex mr-2 transition-opacity delay-100',
