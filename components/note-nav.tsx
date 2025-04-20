@@ -183,7 +183,7 @@ const NoteNav = () => {
                         "animate-pulse": hasLocalChanges
                     })}
                     disabled={!note || !hasLocalChanges}
-                    icon="Save"
+                    icon="DocumentText"
                 />
             </HotkeyTooltip>
             
@@ -194,7 +194,7 @@ const NoteNav = () => {
                         onClick={handleClickDiscard}
                         className="mr-2"
                         disabled={!note || !hasLocalChanges}
-                        icon="X"
+                        icon="Trash"
                     />
                 </HotkeyTooltip>
             )}
