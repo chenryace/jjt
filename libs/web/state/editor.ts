@@ -1,4 +1,4 @@
-import NoteState from 'libs/web/state/note';
+import { NoteModel } from 'libs/shared/note';
 import { useRouter } from 'next/router';
 import {
     useCallback,
@@ -60,30 +60,53 @@ const useEditor = (initNote?: NoteModel) => {
     const [localContent, setLocalContent] = useState<string>('');
     const [localTitle, setLocalTitle] = useState<string>('');
     
-    // 初始化本地内容
+    // 添加编辑器渲染状态
+    const [editorKey, setEditorKey] = useState<number>(0);
+    
+    // 添加组合输入状态
+    const [isComposing, setIsComposing] = useState<boolean>(false);
+    
+    // 初始化本地内容，优化缓存处理
     useEffect(() => {
         if (note) {
+            console.log('初始化编辑器内容', { id: note.id, content: note.content });
+            
+            // 始终优先使用服务器数据
             setLocalContent(note.content || '');
             setLocalTitle(note.title || '');
             setHasLocalChanges(false);
             
-            // 检查localStorage中是否有未保存的内容
+            // 清除localStorage中可能存在的旧数据
             if (note.id) {
-                const savedContent = localStorage.getItem(`note_content_${note.id}`);
-                const savedTitle = localStorage.getItem(`note_title_${note.id}`);
-                
-                if (savedContent && savedContent !== note.content) {
-                    setLocalContent(savedContent);
-                    setHasLocalChanges(true);
-                }
-                
-                if (savedTitle && savedTitle !== note.title) {
-                    setLocalTitle(savedTitle);
-                    setHasLocalChanges(true);
-                }
+                localStorage.removeItem(`note_content_${note.id}`);
+                localStorage.removeItem(`note_title_${note.id}`);
             }
+            
+            // 强制编辑器重新渲染
+            setEditorKey(prev => prev + 1);
+            
+            // 清除与当前笔记无关的缓存
+            clearIrrelevantCache(note.id);
         }
     }, [note]);
+    
+    // 清除与当前笔记无关的缓存
+    const clearIrrelevantCache = useCallback(async (currentNoteId: string) => {
+        try {
+            console.log('清除与当前笔记无关的缓存', currentNoteId);
+            const keys = await noteCache.keys();
+            
+            // 保留当前笔记的缓存，清除其他缓存
+            const keysToRemove = keys.filter(id => id !== currentNoteId);
+            
+            if (keysToRemove.length > 0) {
+                console.log(`清除 ${keysToRemove.length} 个缓存项`);
+                await Promise.all(keysToRemove.map(id => noteCache.removeItem(id)));
+            }
+        } catch (error) {
+            console.error('清除缓存失败', error);
+        }
+    }, []);
 
     const onNoteChange = useDebouncedCallback(
         async (data: Partial<NoteModel>) => {
@@ -181,7 +204,7 @@ const useEditor = (initNote?: NoteModel) => {
     const [backlinks, setBackLinks] = useState<NoteCacheItem[]>();
 
     const getBackLinks = useCallback(async () => {
-        console.log(note?.id);
+        console.log('获取反向链接', note?.id);
         const linkNotes: NoteCacheItem[] = [];
         if (!note?.id) return linkNotes;
         setBackLinks([]);
@@ -193,40 +216,57 @@ const useEditor = (initNote?: NoteModel) => {
         setBackLinks(linkNotes);
     }, [note?.id]);
 
-    // 修改为不再自动保存的版本
+    // 修改为考虑组合输入状态的版本
     const onEditorChange = useCallback(
         (value: () => string): void => {
             const newContent = value();
-            // 只更新本地状态，不调用保存
-            setLocalContent(newContent);
-            setHasLocalChanges(true);
+            console.log('编辑器内容变更', { length: newContent.length, isComposing });
             
-            // 保存到localStorage作为备份
-            if (note?.id) {
-                localStorage.setItem(`note_content_${note.id}`, newContent);
+            // 只在非组合输入状态下更新本地存储
+            if (!isComposing) {
+                // 更新本地状态
+                setLocalContent(newContent);
+                setHasLocalChanges(true);
+                
+                // 保存到localStorage作为备份
+                if (note?.id) {
+                    localStorage.setItem(`note_content_${note.id}`, newContent);
+                }
             }
         },
-        [note]
+        [note, isComposing]
     );
     
-    // 添加标题变更处理
+    // 添加标题变更处理，考虑组合输入状态
     const onTitleChange = useCallback(
         (title: string): void => {
-            // 只更新本地状态，不调用保存
-            setLocalTitle(title);
-            setHasLocalChanges(true);
+            console.log('标题变更', { title, isComposing });
             
-            // 保存到localStorage作为备份
-            if (note?.id) {
-                localStorage.setItem(`note_title_${note.id}`, title);
+            // 只在非组合输入状态下更新本地存储
+            if (!isComposing) {
+                // 更新本地状态
+                setLocalTitle(title);
+                setHasLocalChanges(true);
+                
+                // 保存到localStorage作为备份
+                if (note?.id) {
+                    localStorage.setItem(`note_title_${note.id}`, title);
+                }
             }
         },
-        [note]
+        [note, isComposing]
     );
     
     // 添加手动保存函数，确保更新元数据和树结构
     const saveNote = useCallback(async () => {
         if (!note?.id) return false;
+        
+        // 如果正在组合输入，等待组合输入完成
+        if (isComposing) {
+            console.log('正在组合输入中，等待输入完成后保存');
+            toast('请完成当前输入后再保存', 'info');
+            return false;
+        }
         
         try {
             console.log('保存笔记', { id: note?.id, localContent, localTitle });
@@ -274,6 +314,9 @@ const useEditor = (initNote?: NoteModel) => {
                 await treeState.initTree();
             }
             
+            // 强制编辑器重新渲染，解决Markdown渲染问题
+            setEditorKey(prev => prev + 1);
+            
             // 显示保存成功提示
             toast('保存成功', 'success');
             
@@ -283,7 +326,7 @@ const useEditor = (initNote?: NoteModel) => {
             toast('保存失败，请重试', 'error');
             return false;
         }
-    }, [note, localContent, localTitle, updateNote, createNote, router, toast, treeState]);
+    }, [note, localContent, localTitle, updateNote, createNote, router, toast, treeState, isComposing]);
     
     // 添加带重试的保存函数
     const saveNoteWithRetry = useCallback(async (retryCount = 3) => {
@@ -308,6 +351,15 @@ const useEditor = (initNote?: NoteModel) => {
     const discardChanges = useCallback(() => {
         if (!note) return;
         
+        // 如果正在组合输入，等待组合输入完成
+        if (isComposing) {
+            console.log('正在组合输入中，等待输入完成后丢弃更改');
+            toast('请完成当前输入后再丢弃更改', 'info');
+            return;
+        }
+        
+        console.log('丢弃更改', { id: note.id });
+        
         // 恢复到原始内容
         setLocalContent(note.content || '');
         setLocalTitle(note.title || '');
@@ -319,8 +371,17 @@ const useEditor = (initNote?: NoteModel) => {
             localStorage.removeItem(`note_title_${note.id}`);
         }
         
+        // 强制编辑器重新渲染，解决Markdown渲染问题
+        setEditorKey(prev => prev + 1);
+        
         toast('已丢弃更改', 'info');
-    }, [note, toast]);
+    }, [note, toast, isComposing]);
+    
+    // 添加强制重新渲染函数
+    const forceRender = useCallback(() => {
+        console.log('强制编辑器重新渲染');
+        setEditorKey(prev => prev + 1);
+    }, []);
 
     return {
         onCreateLink,
@@ -341,7 +402,15 @@ const useEditor = (initNote?: NoteModel) => {
         hasLocalChanges,
         localContent,
         localTitle,
-        onTitleChange
+        onTitleChange,
+        // 编辑器渲染相关
+        editorKey,
+        forceRender,
+        // 组合输入状态
+        isComposing,
+        setIsComposing,
+        // 缓存管理
+        clearIrrelevantCache
     };
 };
 
