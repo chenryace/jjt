@@ -1,7 +1,7 @@
 import classNames from 'classnames';
 import NoteState from 'libs/web/state/note';
 import UIState from 'libs/web/state/ui';
-import { useCallback, MouseEvent } from 'react';
+import { useCallback, MouseEvent, useState } from 'react';
 import { CircularProgress, Tooltip } from '@material-ui/core';
 import NoteTreeState from 'libs/web/state/tree';
 import { Breadcrumbs } from '@material-ui/core';
@@ -13,7 +13,8 @@ import { NOTE_SHARED } from 'libs/shared/meta';
 import useI18n from 'libs/web/hooks/use-i18n';
 import NavButtonGroup from './nav-button-group';
 import { EyeIcon } from '@heroicons/react/outline';
-import EditorState from 'libs/web/state/editor';
+// 移除EditorState导入
+// import EditorState from 'libs/web/state/editor';
 
 const MenuButton = () => {
     const { sidebar } = UIState.useContainer();
@@ -36,6 +37,7 @@ const MenuButton = () => {
     );
 };
 
+// 创建一个接收props的版本，不直接依赖EditorState
 const NoteNav = () => {
     const { t } = useI18n();
     const { note, loading } = NoteState.useContainer();
@@ -44,8 +46,22 @@ const NoteNav = () => {
         NoteTreeState.useContainer();
     const { share, menu, editorWidthSelect } = PortalState.useContainer();
     
-    // 添加编辑器状态
-    const { saveNote, hasLocalChanges, discardChanges } = EditorState.useContainer();
+    // 移除对EditorState的直接使用
+    // const { saveNote, hasLocalChanges, discardChanges } = EditorState.useContainer();
+    
+    // 创建一个空的占位函数和状态，这样组件不会报错
+    // 实际的保存功能将在EditorContent组件中实现
+    const [hasLocalChanges] = useState(false);
+    const saveNote = useCallback(async () => {
+        // 这个函数不会被实际调用，因为按钮会被禁用
+        console.log('Save function not available in NoteNav');
+        return false;
+    }, []);
+    
+    const discardChanges = useCallback(() => {
+        // 这个函数不会被实际调用，因为按钮会被禁用
+        console.log('Discard function not available in NoteNav');
+    }, []);
 
     const handleClickShare = useCallback(
         (event: MouseEvent) => {
@@ -80,7 +96,7 @@ const NoteNav = () => {
         showItem(note);
     }, [note, showItem]);
     
-    // 添加保存按钮点击处理
+    // 保存按钮点击处理（占位函数）
     const handleClickSave = useCallback(
         async (event: MouseEvent) => {
             event.stopPropagation();
@@ -89,13 +105,11 @@ const NoteNav = () => {
         [saveNote]
     );
     
-    // 添加丢弃更改按钮点击处理
+    // 丢弃更改按钮点击处理（占位函数）
     const handleClickDiscard = useCallback(
         (event: MouseEvent) => {
             event.stopPropagation();
-            if (window.confirm('确定要丢弃所有未保存的更改吗？')) {
-                discardChanges();
-            }
+            discardChanges();
         },
         [discardChanges]
     );
@@ -167,15 +181,15 @@ const NoteNav = () => {
                 </style>
             </div>
             
-            {/* 添加保存状态指示器 */}
-            {hasLocalChanges && (
+            {/* 保存状态指示器 - 暂时隐藏，将在EditorNavButtons组件中实现 */}
+            {/* {hasLocalChanges && (
                 <div className="mr-2 text-xs text-red-500 font-medium">
                     未保存
                 </div>
-            )}
+            )} */}
             
-            {/* 添加保存按钮 */}
-            <HotkeyTooltip text={t('保存笔记 (Ctrl+S)')}>
+            {/* 保存按钮 - 暂时隐藏，将在EditorNavButtons组件中实现 */}
+            {/* <HotkeyTooltip text={t('保存笔记 (Ctrl+S)')}>
                 <IconButton
                     onClick={handleClickSave}
                     className={classNames("mr-2", {
@@ -185,10 +199,10 @@ const NoteNav = () => {
                     disabled={!note || !hasLocalChanges}
                     icon="DocumentText"
                 />
-            </HotkeyTooltip>
+            </HotkeyTooltip> */}
             
-            {/* 添加丢弃更改按钮 */}
-            {hasLocalChanges && (
+            {/* 丢弃更改按钮 - 暂时隐藏，将在EditorNavButtons组件中实现 */}
+            {/* {hasLocalChanges && (
                 <HotkeyTooltip text={t('丢弃更改')}>
                     <IconButton
                         onClick={handleClickDiscard}
@@ -197,7 +211,7 @@ const NoteNav = () => {
                         icon="Trash"
                     />
                 </HotkeyTooltip>
-            )}
+            )} */}
             
             <div
                 className={classNames(
