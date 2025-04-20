@@ -25,7 +25,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         backlinks,
         editorEl,
         note,
-        setIsComposing, // 使用新增的setIsComposing函数
     } = EditorState.useContainer();
     const height = use100vh();
     const mounted = useMounted();
@@ -34,6 +33,9 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const toast = useToast();
     const dictionary = useDictionary();
     const embeds = useEmbeds();
+    
+    // 使用本地状态跟踪组合输入
+    const [isComposing, setIsComposing] = useState(false);
 
     useEffect(() => {
         if (isPreview) return;
@@ -44,12 +46,15 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const handleCompositionStart = useCallback(() => {
         console.log('输入法组合开始');
         setIsComposing(true);
-    }, [setIsComposing]);
+    }, []);
 
     const handleCompositionEnd = useCallback(() => {
         console.log('输入法组合结束');
         setIsComposing(false);
-    }, [setIsComposing]);
+        
+        // 组合结束后，可以在这里添加额外的处理逻辑
+        // 例如，强制更新编辑器内容
+    }, []);
 
     // 添加编辑器DOM引用的事件监听
     useEffect(() => {
