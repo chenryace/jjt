@@ -10,6 +10,9 @@ import { useToast } from 'libs/web/hooks/use-toast';
 import { useDictionary } from './dictionary';
 import { useEmbeds } from './embeds';
 
+// 本地存储键前缀
+const STORAGE_KEY_PREFIX = 'notea_ime_';
+
 export interface EditorProps extends Pick<Props, 'readOnly'> {
     isPreview?: boolean;
 }
@@ -38,6 +41,12 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const [isComposing, setIsComposing] = useState(false);
     // 存储组合输入期间的特殊字符和命令
     const pendingChars = useRef<string>("");
+    // 创建MutationObserver引用
+    const observerRef = useRef<MutationObserver | null>(null);
+    // 跟踪上次内容变化时间
+    const lastMutationTime = useRef<number>(0);
+    // 跟踪是否有待处理的变化
+    const hasPendingChanges = useRef<boolean>(false);
 
     useEffect(() => {
         if (isPreview) return;
@@ -55,45 +64,23 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const handleCompositionEnd = useCallback(() => {
         console.log('输入法组合结束');
         
-        // 组合结束后，处理待处理的特殊字符
-        if (editorEl.current && editorEl.current.view && pendingChars.current) {
-            const { state, dispatch } = editorEl.current.view;
-            
-            // 保存待处理字符的副本，因为我们会在处理过程中清空它
-            const chars = pendingChars.current;
-            pendingChars.current = "";
-            
-            // 延迟处理，确保组合输入已完成
-            setTimeout(() => {
-                if (!editorEl.current || !editorEl.current.view) return;
-                
-                // 插入待处理的字符
-                dispatch(state.tr.insertText(chars));
-                
-                // 如果有特殊Markdown字符，处理相应的命令
-                if (chars.includes('/')) {
-                    // 处理斜杠命令
-                    setTimeout(() => {
-                        if (editorEl.current && editorEl.current.view) {
-                            // 触发一个空事务来刷新编辑器状态，这会激活斜杠命令菜单
-                            editorEl.current.view.dispatch(editorEl.current.view.state.tr);
-                        }
-                    }, 50); // 增加延迟时间，确保输入完全处理完毕
-                } else if (chars.includes('*')) {
-                    // 处理加粗/斜体命令
-                    handleMarkdownCommand('*');
-                } else if (chars.includes('#')) {
-                    // 处理标题命令
-                    handleMarkdownCommand('#');
-                }
-            }, 50); // 增加延迟时间，确保组合输入完全结束
+        // 标记有待处理的变化，但不立即处理
+        // MutationObserver会在DOM实际变化后处理
+        hasPendingChanges.current = true;
+        
+        // 保存组合结束时间，用于MutationObserver判断
+        lastMutationTime.current = Date.now();
+        
+        // 如果有特殊字符，保存到localStorage以便在DOM变化后恢复
+        if (pendingChars.current && note?.id) {
+            localStorage.setItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`, pendingChars.current);
         }
         
         // 重置组合状态
         setIsComposing(false);
-    }, [editorEl, handleMarkdownCommand]);
+    }, [note?.id]);
 
-    // 添加编辑器DOM引用的事件监听
+    // 添加编辑器DOM引用的事件监听和MutationObserver
     useEffect(() => {
         if (!editorEl.current || isPreview || readOnly) return;
 
@@ -104,13 +91,83 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 添加组合事件监听
         editorDom.addEventListener('compositionstart', handleCompositionStart);
         editorDom.addEventListener('compositionend', handleCompositionEnd);
+        
+        // 创建MutationObserver来监听DOM变化
+        const observer = new MutationObserver((mutations) => {
+            // 如果没有待处理的变化，直接返回
+            if (!hasPendingChanges.current) return;
+            
+            // 检查是否有文本内容变化
+            const hasTextChange = mutations.some(mutation => 
+                mutation.type === 'characterData' || 
+                mutation.type === 'childList' || 
+                mutation.addedNodes.length > 0 || 
+                mutation.removedNodes.length > 0
+            );
+            
+            if (hasTextChange) {
+                // 计算自上次组合结束后经过的时间
+                const timeSinceLastMutation = Date.now() - lastMutationTime.current;
+                
+                // 如果DOM变化发生在组合结束后的合理时间内（100ms），处理特殊字符
+                if (timeSinceLastMutation < 100 && note?.id) {
+                    // 从localStorage获取待处理的特殊字符
+                    const storedChars = localStorage.getItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
+                    
+                    if (storedChars && editorEl.current && editorEl.current.view) {
+                        const { state, dispatch } = editorEl.current.view;
+                        
+                        console.log(`从localStorage恢复特殊字符: ${storedChars}`);
+                        
+                        // 处理特殊字符
+                        if (storedChars.includes('/')) {
+                            // 处理斜杠命令
+                            editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                        } else if (storedChars.includes('*')) {
+                            // 处理加粗/斜体命令
+                            handleMarkdownCommand('*');
+                        } else if (storedChars.includes('#')) {
+                            // 处理标题命令
+                            handleMarkdownCommand('#');
+                        }
+                        
+                        // 清除localStorage中的数据
+                        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
+                    }
+                    
+                    // 重置待处理状态
+                    hasPendingChanges.current = false;
+                    pendingChars.current = "";
+                }
+            }
+        });
+        
+        // 保存observer引用以便清理
+        observerRef.current = observer;
+        
+        // 开始观察编辑器DOM变化
+        observer.observe(editorDom, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            characterDataOldValue: true
+        });
 
         return () => {
-            // 清理事件监听
+            // 清理事件监听和MutationObserver
             editorDom.removeEventListener('compositionstart', handleCompositionStart);
             editorDom.removeEventListener('compositionend', handleCompositionEnd);
+            if (observerRef.current) {
+                observerRef.current.disconnect();
+                observerRef.current = null;
+            }
+            
+            // 清理localStorage
+            if (note?.id) {
+                localStorage.removeItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
+            }
         };
-    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd]);
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, note?.id, handleMarkdownCommand]);
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
@@ -160,22 +217,15 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     // 自定义onChange处理，确保在组合输入期间不会打断输入
     const handleEditorChange = useCallback(
         (value: () => string) => {
-            // 如果正在组合输入或有待处理字符，不立即触发onChange
+            // 如果正在组合输入，不立即触发onChange
             if (isComposing) {
                 console.log('组合输入中，延迟处理onChange');
                 return;
             }
             
-            // 如果有待处理字符但不在组合状态，可能是刚刚结束组合
-            if (pendingChars.current) {
-                console.log('有待处理字符，延迟处理onChange');
-                // 延迟处理onChange，确保待处理字符先被插入
-                setTimeout(() => {
-                    if (!isComposing && !pendingChars.current) {
-                        console.log('延迟处理onChange');
-                        onEditorChange(value);
-                    }
-                }, 50);
+            // 如果有待处理的变化，不立即触发onChange
+            if (hasPendingChanges.current) {
+                console.log('有待处理的DOM变化，延迟处理onChange');
                 return;
             }
             
