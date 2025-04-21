@@ -1,168 +1,391 @@
-import { FC, useEffect, useState, useCallback } from 'react';
-import { use100vh } from 'react-div-100vh';
-import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
-import { useEditorTheme } from './theme';
-import useMounted from 'libs/web/hooks/use-mounted';
-import Tooltip from './tooltip';
-import extensions from './extensions';
-import EditorState from 'libs/web/state/editor';
+import { useRouter } from 'next/router';
+import {
+    useCallback,
+    MouseEvent as ReactMouseEvent,
+    useState,
+    useRef,
+    useEffect,
+} from 'react';
+import { searchNote, searchRangeText } from 'libs/web/utils/search';
+import useFetcher from 'libs/web/api/fetcher';
+import { NOTE_DELETED } from 'libs/shared/meta';
+import { isNoteLink, NoteModel } from 'libs/shared/note';
 import { useToast } from 'libs/web/hooks/use-toast';
-import { useDictionary } from './dictionary';
-import { useEmbeds } from './embeds';
+import PortalState from 'libs/web/state/portal';
+import { NoteCacheItem } from 'libs/web/cache';
+import noteCache from 'libs/web/cache/note';
+import { createContainer } from 'unstated-next';
+import MarkdownEditor from '@notea/rich-markdown-editor';
+import { useDebouncedCallback } from 'use-debounce';
+import { ROOT_ID } from 'libs/shared/tree';
+import { has } from 'lodash';
+import UIState from './ui';
+import NoteTreeState from './tree';
+import NoteState from './note';
 
-export interface EditorProps extends Pick<Props, 'readOnly'> {
-    isPreview?: boolean;
-}
+const onSearchLink = async (keyword: string) => {
+    const list = await searchNote(keyword, NOTE_DELETED.NORMAL);
 
-const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
+    return list.map((item) => ({
+        title: item.title,
+        // todo 路径
+        subtitle: searchRangeText({
+            text: item.rawContent || '',
+            keyword,
+            maxLen: 40,
+        }).match,
+        url: `/${item.id}`,
+    }));
+};
+
+const useEditor = (initNote?: NoteModel) => {
     const {
-        onSearchLink,
+        createNoteWithTitle,
+        updateNote,
+        createNote,
+        note: noteProp,
+    } = NoteState.useContainer();
+    const note = initNote ?? noteProp;
+    const {
+        ua: { isBrowser },
+    } = UIState.useContainer();
+    const router = useRouter();
+    const { request, error } = useFetcher();
+    const toast = useToast();
+    const editorEl = useRef<MarkdownEditor>(null);
+    const treeState = NoteTreeState.useContainer();
+    
+    // 添加本地更改状态
+    const [hasLocalChanges, setHasLocalChanges] = useState<boolean>(false);
+    const [localContent, setLocalContent] = useState<string>('');
+    const [localTitle, setLocalTitle] = useState<string>('');
+    
+    // 添加编辑器渲染状态
+    const [editorKey, setEditorKey] = useState<number>(0);
+    
+    // 初始化本地内容，优化缓存处理
+    useEffect(() => {
+        if (note) {
+            console.log('初始化编辑器内容', { id: note.id, content: note.content });
+            
+            // 始终优先使用服务器数据
+            setLocalContent(note.content || '');
+            setLocalTitle(note.title || '');
+            setHasLocalChanges(false);
+            
+            // 清除localStorage中可能存在的旧数据
+            if (note.id) {
+                localStorage.removeItem(`note_content_${note.id}`);
+                localStorage.removeItem(`note_title_${note.id}`);
+            }
+            
+            // 强制编辑器重新渲染
+            setEditorKey(prev => prev + 1);
+            
+            // 清除与当前笔记无关的缓存
+            clearIrrelevantCache(note.id);
+        }
+    }, [note]);
+    
+    // 清除与当前笔记无关的缓存
+    const clearIrrelevantCache = useCallback(async (currentNoteId: string) => {
+        try {
+            console.log('清除与当前笔记无关的缓存', currentNoteId);
+            const keys = await noteCache.keys();
+            
+            // 保留当前笔记的缓存，清除其他缓存
+            const keysToRemove = keys.filter(id => id !== currentNoteId);
+            
+            if (keysToRemove.length > 0) {
+                console.log(`清除 ${keysToRemove.length} 个缓存项`);
+                await Promise.all(keysToRemove.map(id => noteCache.removeItem(id)));
+            }
+        } catch (error) {
+            console.error('清除缓存失败', error);
+        }
+    }, []);
+
+    const onNoteChange = useDebouncedCallback(
+        async (data: Partial<NoteModel>) => {
+            const isNew = has(router.query, 'new');
+
+            if (isNew) {
+                data.pid = (router.query.pid as string) || ROOT_ID;
+                const item = await createNote({ ...note, ...data });
+                const noteUrl = `/${item?.id}`;
+
+                if (router.asPath !== noteUrl) {
+                    await router.replace(noteUrl, undefined, { shallow: true });
+                }
+            } else {
+                await updateNote(data);
+            }
+        },
+        500
+    );
+
+    const onCreateLink = useCallback(
+        async (title: string) => {
+            const result = await createNoteWithTitle(title);
+
+            if (!result) {
+                throw new Error('todo');
+            }
+
+            return `/${result.id}`;
+        },
+        [createNoteWithTitle]
+    );
+
+    const onClickLink = useCallback(
+        (href: string) => {
+            if (isNoteLink(href.replace(location.origin, ''))) {
+                router.push(href, undefined, { shallow: true })
+                    .catch((v) => console.error('Error whilst pushing href to router: %O', v));
+            } else {
+                window.open(href, '_blank');
+            }
+        },
+        [router]
+    );
+
+    const onUploadImage = useCallback(
+        async (file: File, id?: string) => {
+            const data = new FormData();
+            data.append('file', file);
+            const result = await request<FormData, { url: string }>(
+                {
+                    method: 'POST',
+                    url: `/api/upload?id=${id}`,
+                },
+                data
+            );
+            if (!result) {
+                toast(error, 'error');
+                throw Error(error);
+            }
+            return result.url;
+        },
+        [error, request, toast]
+    );
+
+    const { preview, linkToolbar } = PortalState.useContainer();
+
+    const onHoverLink = useCallback(
+        (event: MouseEvent | ReactMouseEvent) => {
+            if (!isBrowser || editorEl.current?.props.readOnly) {
+                return true;
+            }
+            const link = event.target as HTMLLinkElement;
+            const href = link.getAttribute('href');
+            if (link.classList.contains('bookmark')) {
+                return true;
+            }
+            if (href) {
+                if (isNoteLink(href)) {
+                    preview.close();
+                    preview.setData({ id: href.slice(1) });
+                    preview.setAnchor(link);
+                } else {
+                    linkToolbar.setData({ href, view: editorEl.current?.view });
+                    linkToolbar.setAnchor(link);
+                }
+            } else {
+                preview.setData({ id: undefined });
+            }
+            return true;
+        },
+        [isBrowser, preview, linkToolbar]
+    );
+
+    const [backlinks, setBackLinks] = useState<NoteCacheItem[]>();
+
+    const getBackLinks = useCallback(async () => {
+        console.log('获取反向链接', note?.id);
+        const linkNotes: NoteCacheItem[] = [];
+        if (!note?.id) return linkNotes;
+        setBackLinks([]);
+        await noteCache.iterate<NoteCacheItem, void>((value) => {
+            if (value.linkIds?.includes(note.id)) {
+                linkNotes.push(value);
+            }
+        });
+        setBackLinks(linkNotes);
+    }, [note?.id]);
+
+    // 修改为不再自动保存的版本
+    const onEditorChange = useCallback(
+        (value: () => string): void => {
+            const newContent = value();
+            console.log('编辑器内容变更', { length: newContent.length });
+            
+            // 更新本地状态
+            setLocalContent(newContent);
+            setHasLocalChanges(true);
+            
+            // 保存到localStorage作为备份
+            if (note?.id) {
+                localStorage.setItem(`note_content_${note.id}`, newContent);
+            }
+        },
+        [note]
+    );
+    
+    // 添加标题变更处理
+    const onTitleChange = useCallback(
+        (title: string): void => {
+            console.log('标题变更', { title });
+            
+            // 更新本地状态
+            setLocalTitle(title);
+            setHasLocalChanges(true);
+            
+            // 保存到localStorage作为备份
+            if (note?.id) {
+                localStorage.setItem(`note_title_${note.id}`, title);
+            }
+        },
+        [note]
+    );
+    
+    // 添加手动保存函数，确保更新元数据和树结构
+    const saveNote = useCallback(async () => {
+        if (!note?.id) return false;
+        
+        try {
+            console.log('保存笔记', { id: note?.id, localContent, localTitle });
+            
+            // 对于新笔记的特殊处理
+            const isNew = has(router.query, 'new');
+            if (isNew) {
+                // 确保包含必要的元数据，特别是日期和pid
+                const data = {
+                    content: localContent,
+                    title: localTitle,
+                    pid: (router.query.pid as string) || ROOT_ID,
+                    date: new Date().toISOString() // 添加日期元数据
+                };
+                
+                console.log('创建新笔记', data);
+                const item = await createNote({ ...note, ...data });
+                const noteUrl = `/${item?.id}`;
+                
+                if (router.asPath !== noteUrl) {
+                    await router.replace(noteUrl, undefined, { shallow: true });
+                }
+            } else {
+                // 保存现有笔记，确保包含日期元数据
+                console.log('更新现有笔记', { content: localContent, title: localTitle });
+                await updateNote({
+                    content: localContent,
+                    title: localTitle,
+                    date: new Date().toISOString() // 添加日期元数据
+                });
+            }
+            
+            // 清除本地更改标记
+            setHasLocalChanges(false);
+            
+            // 清除localStorage
+            if (note.id) {
+                localStorage.removeItem(`note_content_${note.id}`);
+                localStorage.removeItem(`note_title_${note.id}`);
+            }
+            
+            // 保存成功后，刷新树结构以确保侧栏正确显示
+            if (treeState && typeof treeState.initTree === 'function') {
+                console.log('刷新树结构');
+                await treeState.initTree();
+            }
+            
+            // 强制编辑器重新渲染，解决Markdown渲染问题
+            setEditorKey(prev => prev + 1);
+            
+            // 显示保存成功提示
+            toast('保存成功', 'success');
+            
+            return true;
+        } catch (error) {
+            console.error('保存失败', error);
+            toast('保存失败，请重试', 'error');
+            return false;
+        }
+    }, [note, localContent, localTitle, updateNote, createNote, router, toast, treeState]);
+    
+    // 添加带重试的保存函数
+    const saveNoteWithRetry = useCallback(async (retryCount = 3) => {
+        for (let i = 0; i < retryCount; i++) {
+            try {
+                const result = await saveNote();
+                if (result) return true;
+            } catch (error) {
+                console.error(`保存失败，尝试重试 (${i+1}/${retryCount})`, error);
+                if (i === retryCount - 1) {
+                    toast('保存失败，请手动刷新页面后重试', 'error');
+                    return false;
+                }
+                // 等待一段时间后重试
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        return false;
+    }, [saveNote, toast]);
+    
+    // 添加丢弃更改函数
+    const discardChanges = useCallback(() => {
+        if (!note) return;
+        
+        console.log('丢弃更改', { id: note.id });
+        
+        // 恢复到原始内容
+        setLocalContent(note.content || '');
+        setLocalTitle(note.title || '');
+        setHasLocalChanges(false);
+        
+        // 清除localStorage
+        if (note.id) {
+            localStorage.removeItem(`note_content_${note.id}`);
+            localStorage.removeItem(`note_title_${note.id}`);
+        }
+        
+        // 强制编辑器重新渲染，解决Markdown渲染问题
+        setEditorKey(prev => prev + 1);
+        
+        toast('已丢弃更改', 'info');
+    }, [note, toast]);
+    
+    // 添加强制重新渲染函数
+    const forceRender = useCallback(() => {
+        console.log('强制编辑器重新渲染');
+        setEditorKey(prev => prev + 1);
+    }, []);
+
+    return {
         onCreateLink,
+        onSearchLink,
         onClickLink,
         onUploadImage,
         onHoverLink,
+        getBackLinks,
         onEditorChange,
+        onNoteChange,
         backlinks,
         editorEl,
         note,
-    } = EditorState.useContainer();
-    const height = use100vh();
-    const mounted = useMounted();
-    const editorTheme = useEditorTheme();
-    const [hasMinHeight, setHasMinHeight] = useState(true);
-    const toast = useToast();
-    const dictionary = useDictionary();
-    const embeds = useEmbeds();
-    
-    // 使用本地状态跟踪组合输入
-    const [isComposing, setIsComposing] = useState(false);
-
-    useEffect(() => {
-        if (isPreview) return;
-        setHasMinHeight((backlinks?.length ?? 0) <= 0);
-    }, [backlinks, isPreview]);
-
-    // 添加组合事件处理函数
-    const handleCompositionStart = useCallback(() => {
-        console.log('输入法组合开始');
-        setIsComposing(true);
-    }, []);
-
-    const handleCompositionEnd = useCallback(() => {
-        console.log('输入法组合结束');
-        setIsComposing(false);
-        
-        // 组合结束后，强制更新编辑器视图以确保斜杠命令正常工作
-        if (editorEl.current && editorEl.current.view) {
-            setTimeout(() => {
-                // 使用setTimeout确保组合结束后再触发更新
-                editorEl.current?.view?.dispatch(editorEl.current.view.state.tr);
-            }, 0);
-        }
-    }, [editorEl]);
-
-    // 添加编辑器DOM引用的事件监听
-    useEffect(() => {
-        if (!editorEl.current || isPreview || readOnly) return;
-
-        // 获取编辑器的DOM元素
-        const editorDom = editorEl.current.element;
-        if (!editorDom) return;
-
-        // 添加组合事件监听
-        editorDom.addEventListener('compositionstart', handleCompositionStart);
-        editorDom.addEventListener('compositionend', handleCompositionEnd);
-
-        return () => {
-            // 清理事件监听
-            editorDom.removeEventListener('compositionstart', handleCompositionStart);
-            editorDom.removeEventListener('compositionend', handleCompositionEnd);
-        };
-    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd]);
-    
-    // 自定义键盘事件处理，解决中文输入法下斜杠命令问题
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        // 如果不是在组合输入状态，则不需要特殊处理
-        if (!isComposing) return;
-        
-        // 在组合输入状态下，如果按下斜杠键，需要特殊处理
-        if (e.key === '/' && editorEl.current && editorEl.current.view) {
-            // 阻止默认行为
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // 等待组合输入结束后再插入斜杠
-            setTimeout(() => {
-                if (editorEl.current && editorEl.current.view) {
-                    // 手动插入斜杠字符
-                    const { state, dispatch } = editorEl.current.view;
-                    dispatch(state.tr.insertText('/'));
-                }
-            }, 10);
-        }
-    }, [isComposing, editorEl]);
-
-    return (
-        <>
-            <div onKeyDown={handleKeyDown}>
-                <MarkdownEditor
-                    readOnly={readOnly}
-                    id={note?.id}
-                    ref={editorEl}
-                    value={mounted ? note?.content : ''}
-                    onChange={onEditorChange}
-                    placeholder={dictionary.editorPlaceholder}
-                    theme={editorTheme}
-                    uploadImage={(file) => onUploadImage(file, note?.id)}
-                    onSearchLink={onSearchLink}
-                    onCreateLink={onCreateLink}
-                    onClickLink={onClickLink}
-                    onHoverLink={onHoverLink}
-                    onShowToast={toast}
-                    dictionary={dictionary}
-                    tooltip={Tooltip}
-                    extensions={extensions}
-                    className="px-4 md:px-0"
-                    embeds={embeds}
-                />
-            </div>
-            <style jsx global>{`
-                .ProseMirror ul {
-                    list-style-type: disc;
-                }
-
-                .ProseMirror ol {
-                    list-style-type: decimal;
-                }
-
-                .ProseMirror {
-                    ${hasMinHeight
-                        ? `min-height: calc(${
-                              height ? height + 'px' : '100vh'
-                          } - 14rem);`
-                        : ''}
-                    padding-bottom: 10rem;
-                }
-
-                .ProseMirror h1 {
-                    font-size: 2.8em;
-                }
-                .ProseMirror h2 {
-                    font-size: 1.8em;
-                }
-                .ProseMirror h3 {
-                    font-size: 1.5em;
-                }
-                .ProseMirror a:not(.bookmark) {
-                    text-decoration: underline;
-                }
-
-                .ProseMirror .image .ProseMirror-selectednode img {
-                    pointer-events: unset;
-                }
-            `}</style>
-        </>
-    );
+        // 新增的手动保存相关函数和状态
+        saveNote,
+        saveNoteWithRetry,
+        discardChanges,
+        hasLocalChanges,
+        localContent,
+        localTitle,
+        onTitleChange,
+        // 编辑器渲染相关
+        editorKey,
+        forceRender
+    };
 };
 
-export default Editor;
+const EditorState = createContainer(useEditor);
+
+export default EditorState;
