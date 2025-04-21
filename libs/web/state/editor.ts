@@ -21,6 +21,7 @@ import { ROOT_ID } from 'libs/shared/tree';
 import { has } from 'lodash';
 import UIState from './ui';
 import NoteTreeState from './tree';
+import NoteState from './note';
 
 const onSearchLink = async (keyword: string) => {
     const list = await searchNote(keyword, NOTE_DELETED.NORMAL);
