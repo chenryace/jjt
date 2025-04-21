@@ -1,4 +1,4 @@
-import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
 import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
@@ -38,6 +38,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const [isComposing, setIsComposing] = useState(false);
     // 跟踪是否有待处理的斜杠命令
     const [slashCommandPending, setSlashCommandPending] = useState(false);
+    // 跟踪组合输入期间的特殊字符
+    const pendingSpecialChars = useRef<string[]>([]);
+    // 跟踪组合输入的位置
+    const compositionPosition = useRef<{from: number, to: number} | null>(null);
 
     useEffect(() => {
         if (isPreview) return;
@@ -48,32 +52,58 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const handleCompositionStart = useCallback(() => {
         console.log('输入法组合开始');
         setIsComposing(true);
-    }, []);
+        
+        // 记录当前光标位置
+        if (editorEl.current && editorEl.current.view) {
+            const { state } = editorEl.current.view;
+            const { from, to } = state.selection;
+            compositionPosition.current = { from, to };
+        }
+        
+        // 清空待处理特殊字符
+        pendingSpecialChars.current = [];
+    }, [editorEl]);
 
     const handleCompositionEnd = useCallback(() => {
         console.log('输入法组合结束');
         setIsComposing(false);
         
-        // 组合结束后，处理待处理的斜杠命令
-        if (slashCommandPending && editorEl.current && editorEl.current.view) {
+        // 组合结束后，处理待处理的斜杠命令和特殊字符
+        if (editorEl.current && editorEl.current.view) {
             setTimeout(() => {
-                // 手动插入斜杠字符
-                // 添加空值检查，确保editorEl.current和view都存在
-                if (editorEl.current && editorEl.current.view) {
-                    const { state, dispatch } = editorEl.current.view;
+                if (!editorEl.current || !editorEl.current.view) return;
+                
+                const { state, dispatch } = editorEl.current.view;
+                
+                // 处理斜杠命令
+                if (slashCommandPending) {
                     dispatch(state.tr.insertText('/'));
-                    // 重置待处理状态
                     setSlashCommandPending(false);
+                    
                     // 强制更新视图以触发斜杠命令菜单
-                    editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                    setTimeout(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                        }
+                    }, 10);
+                } 
+                
+                // 处理其他待处理的特殊字符
+                if (pendingSpecialChars.current.length > 0) {
+                    const specialChars = pendingSpecialChars.current.join('');
+                    if (specialChars) {
+                        dispatch(state.tr.insertText(specialChars));
+                    }
+                    pendingSpecialChars.current = [];
                 }
+                
+                // 无论如何都强制更新视图，确保编辑器状态正确
+                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
             }, 10);
-        } else if (editorEl.current && editorEl.current.view) {
-            // 即使没有待处理的斜杠命令，也强制更新编辑器视图
-            setTimeout(() => {
-                editorEl.current?.view?.dispatch(editorEl.current.view.state.tr);
-            }, 0);
         }
+        
+        // 重置组合位置
+        compositionPosition.current = null;
     }, [editorEl, slashCommandPending]);
 
     // 添加编辑器DOM引用的事件监听
@@ -95,7 +125,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         };
     }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd]);
     
-    // 自定义键盘事件处理，解决中文输入法下斜杠命令问题
+    // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
         // 如果在组合输入状态下按下斜杠键
         if (isComposing && e.key === '/') {
@@ -109,11 +139,25 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             return;
         }
         
-        // 处理其他键盘事件
-        if (isComposing && (e.key === '#' || e.key === '*' || e.key === '>' || e.key === '`')) {
-            // 对于其他Markdown语法字符，也进行特殊处理
+        // 处理其他Markdown语法特殊字符
+        const specialChars = ['#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
+        if (isComposing && specialChars.includes(e.key)) {
             console.log(`组合输入中检测到特殊字符: ${e.key}`);
-            // 不阻止默认行为，但标记为组合输入中
+            // 阻止默认行为
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // 将特殊字符添加到待处理队列
+            pendingSpecialChars.current.push(e.key);
+            return;
+        }
+        
+        // 处理组合输入期间的Enter键，可能会触发Markdown格式化
+        if (isComposing && (e.key === 'Enter' || e.key === 'Tab')) {
+            console.log(`组合输入中检测到格式键: ${e.key}`);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
         }
     }, [isComposing]);
 
@@ -126,10 +170,16 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 return;
             }
             
+            // 检查是否有待处理的特殊字符或斜杠命令
+            if (slashCommandPending || pendingSpecialChars.current.length > 0) {
+                console.log('有待处理的特殊字符或斜杠命令，延迟处理onChange');
+                return;
+            }
+            
             // 否则正常处理onChange
             onEditorChange(value);
         },
-        [isComposing, onEditorChange]
+        [isComposing, onEditorChange, slashCommandPending]
     );
 
     return (
@@ -138,6 +188,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 onKeyDown={handleKeyDown}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
+                onCompositionUpdate={() => console.log('组合输入更新中')}
             >
                 <MarkdownEditor
                     readOnly={readOnly}
