@@ -36,12 +36,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     
     // 使用本地状态跟踪组合输入
     const [isComposing, setIsComposing] = useState(false);
-    // 跟踪是否有待处理的斜杠命令
-    const [slashCommandPending, setSlashCommandPending] = useState(false);
-    // 跟踪组合输入期间的特殊字符
-    const pendingSpecialChars = useRef<string[]>([]);
-    // 跟踪组合输入的位置
-    const compositionPosition = useRef<{from: number, to: number} | null>(null);
+    // 存储组合输入期间的特殊字符和命令
+    const pendingChars = useRef<string>("");
 
     useEffect(() => {
         if (isPreview) return;
@@ -52,59 +48,41 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const handleCompositionStart = useCallback(() => {
         console.log('输入法组合开始');
         setIsComposing(true);
-        
-        // 记录当前光标位置
-        if (editorEl.current && editorEl.current.view) {
-            const { state } = editorEl.current.view;
-            const { from, to } = state.selection;
-            compositionPosition.current = { from, to };
-        }
-        
-        // 清空待处理特殊字符
-        pendingSpecialChars.current = [];
-    }, [editorEl]);
+        // 清空待处理字符
+        pendingChars.current = "";
+    }, []);
 
     const handleCompositionEnd = useCallback(() => {
         console.log('输入法组合结束');
-        setIsComposing(false);
         
-        // 组合结束后，处理待处理的斜杠命令和特殊字符
-        if (editorEl.current && editorEl.current.view) {
+        // 组合结束后，处理待处理的特殊字符
+        if (editorEl.current && editorEl.current.view && pendingChars.current) {
+            const { state, dispatch } = editorEl.current.view;
+            
+            // 延迟处理，确保组合输入已完成
             setTimeout(() => {
                 if (!editorEl.current || !editorEl.current.view) return;
                 
-                const { state, dispatch } = editorEl.current.view;
-                
-                // 处理斜杠命令
-                if (slashCommandPending) {
-                    dispatch(state.tr.insertText('/'));
-                    setSlashCommandPending(false);
+                // 插入待处理的字符
+                if (pendingChars.current) {
+                    dispatch(state.tr.insertText(pendingChars.current));
+                    pendingChars.current = "";
                     
-                    // 强制更新视图以触发斜杠命令菜单
-                    setTimeout(() => {
-                        if (editorEl.current && editorEl.current.view) {
-                            editorEl.current.view.dispatch(editorEl.current.view.state.tr);
-                        }
-                    }, 10);
-                } 
-                
-                // 处理其他待处理的特殊字符
-                if (pendingSpecialChars.current.length > 0) {
-                    const specialChars = pendingSpecialChars.current.join('');
-                    if (specialChars) {
-                        dispatch(state.tr.insertText(specialChars));
+                    // 如果有斜杠命令，强制更新视图以触发命令菜单
+                    if (pendingChars.current.includes('/')) {
+                        setTimeout(() => {
+                            if (editorEl.current && editorEl.current.view) {
+                                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                            }
+                        }, 10);
                     }
-                    pendingSpecialChars.current = [];
                 }
-                
-                // 无论如何都强制更新视图，确保编辑器状态正确
-                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
             }, 10);
         }
         
-        // 重置组合位置
-        compositionPosition.current = null;
-    }, [editorEl, slashCommandPending]);
+        // 重置组合状态
+        setIsComposing(false);
+    }, [editorEl]);
 
     // 添加编辑器DOM引用的事件监听
     useEffect(() => {
@@ -127,32 +105,22 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
-        // 如果在组合输入状态下按下斜杠键
-        if (isComposing && e.key === '/') {
-            console.log('组合输入中检测到斜杠键');
-            // 阻止默认行为
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // 标记有一个待处理的斜杠命令
-            setSlashCommandPending(true);
-            return;
-        }
+        // 定义需要特殊处理的Markdown语法字符
+        const specialChars = ['/', '#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
         
-        // 处理其他Markdown语法特殊字符
-        const specialChars = ['#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
+        // 如果在组合输入状态下按下特殊字符
         if (isComposing && specialChars.includes(e.key)) {
             console.log(`组合输入中检测到特殊字符: ${e.key}`);
             // 阻止默认行为
             e.preventDefault();
             e.stopPropagation();
             
-            // 将特殊字符添加到待处理队列
-            pendingSpecialChars.current.push(e.key);
+            // 将特殊字符添加到待处理字符串
+            pendingChars.current += e.key;
             return;
         }
         
-        // 处理组合输入期间的Enter键，可能会触发Markdown格式化
+        // 处理组合输入期间的格式化键，防止意外触发Markdown格式化
         if (isComposing && (e.key === 'Enter' || e.key === 'Tab')) {
             console.log(`组合输入中检测到格式键: ${e.key}`);
             e.preventDefault();
@@ -164,22 +132,16 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     // 自定义onChange处理，确保在组合输入期间不会打断输入
     const handleEditorChange = useCallback(
         (value: () => string) => {
-            // 如果正在组合输入，不立即触发onChange
-            if (isComposing) {
-                console.log('组合输入中，延迟处理onChange');
-                return;
-            }
-            
-            // 检查是否有待处理的特殊字符或斜杠命令
-            if (slashCommandPending || pendingSpecialChars.current.length > 0) {
-                console.log('有待处理的特殊字符或斜杠命令，延迟处理onChange');
+            // 如果正在组合输入或有待处理字符，不立即触发onChange
+            if (isComposing || pendingChars.current) {
+                console.log('组合输入中或有待处理字符，延迟处理onChange');
                 return;
             }
             
             // 否则正常处理onChange
             onEditorChange(value);
         },
-        [isComposing, onEditorChange, slashCommandPending]
+        [isComposing, onEditorChange]
     );
 
     return (
@@ -188,7 +150,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 onKeyDown={handleKeyDown}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
-                onCompositionUpdate={() => console.log('组合输入更新中')}
             >
                 <MarkdownEditor
                     readOnly={readOnly}
