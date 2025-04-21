@@ -79,6 +79,30 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 重置组合状态
         setIsComposing(false);
     }, [note?.id]);
+    
+    // 添加处理Markdown格式化命令的函数
+    const handleMarkdownCommand = useCallback((command: string) => {
+        if (!editorEl.current || !editorEl.current.view) return;
+        
+        console.log(`处理Markdown命令: ${command}`);
+        
+        // 根据命令类型执行相应操作
+        switch (command) {
+            case '*':
+            case '**':
+                // 强制刷新视图，确保格式化正确应用
+                setTimeout(() => {
+                    if (editorEl.current && editorEl.current.view) {
+                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                    }
+                }, 10);
+                break;
+            default:
+                break;
+        }
+    }, [editorEl]);
+
+
 
     // 添加编辑器DOM引用的事件监听和MutationObserver
     useEffect(() => {
@@ -166,6 +190,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             }
         };
     }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, note?.id, handleMarkdownCommand]);
+
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
@@ -233,27 +258,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         [isComposing, onEditorChange]
     );
     
-    // 添加处理Markdown格式化命令的函数
-    const handleMarkdownCommand = useCallback((command: string) => {
-        if (!editorEl.current || !editorEl.current.view) return;
-        
-        console.log(`处理Markdown命令: ${command}`);
-        
-        // 根据命令类型执行相应操作
-        switch (command) {
-            case '*':
-            case '**':
-                // 强制刷新视图，确保格式化正确应用
-                setTimeout(() => {
-                    if (editorEl.current && editorEl.current.view) {
-                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
-                    }
-                }, 10);
-                break;
-            default:
-                break;
-        }
-    }, [editorEl]);
+
 
     return (
         <>
