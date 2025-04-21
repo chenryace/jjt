@@ -59,30 +59,39 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (editorEl.current && editorEl.current.view && pendingChars.current) {
             const { state, dispatch } = editorEl.current.view;
             
+            // 保存待处理字符的副本，因为我们会在处理过程中清空它
+            const chars = pendingChars.current;
+            pendingChars.current = "";
+            
             // 延迟处理，确保组合输入已完成
             setTimeout(() => {
                 if (!editorEl.current || !editorEl.current.view) return;
                 
                 // 插入待处理的字符
-                if (pendingChars.current) {
-                    dispatch(state.tr.insertText(pendingChars.current));
-                    pendingChars.current = "";
-                    
-                    // 如果有斜杠命令，强制更新视图以触发命令菜单
-                    if (pendingChars.current.includes('/')) {
-                        setTimeout(() => {
-                            if (editorEl.current && editorEl.current.view) {
-                                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
-                            }
-                        }, 10);
-                    }
+                dispatch(state.tr.insertText(chars));
+                
+                // 如果有特殊Markdown字符，处理相应的命令
+                if (chars.includes('/')) {
+                    // 处理斜杠命令
+                    setTimeout(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            // 触发一个空事务来刷新编辑器状态，这会激活斜杠命令菜单
+                            editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                        }
+                    }, 50); // 增加延迟时间，确保输入完全处理完毕
+                } else if (chars.includes('*')) {
+                    // 处理加粗/斜体命令
+                    handleMarkdownCommand('*');
+                } else if (chars.includes('#')) {
+                    // 处理标题命令
+                    handleMarkdownCommand('#');
                 }
-            }, 10);
+            }, 50); // 增加延迟时间，确保组合输入完全结束
         }
         
         // 重置组合状态
         setIsComposing(false);
-    }, [editorEl]);
+    }, [editorEl, handleMarkdownCommand]);
 
     // 添加编辑器DOM引用的事件监听
     useEffect(() => {
@@ -117,24 +126,56 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             
             // 将特殊字符添加到待处理字符串
             pendingChars.current += e.key;
+            
+            // 如果是斜杠命令，立即在编辑器中显示一个占位符，以便用户知道命令已被捕获
+            if (e.key === '/' && editorEl.current && editorEl.current.view) {
+                // 在编辑器中显示视觉反馈，但不实际插入字符
+                const { state } = editorEl.current.view;
+                const { selection } = state;
+                const pos = selection.$from.pos;
+                
+                // 在当前位置显示一个闪烁的光标，提示用户命令已被捕获
+                editorEl.current.view.dispatch(state.tr.setSelection(selection));
+            }
             return;
         }
         
         // 处理组合输入期间的格式化键，防止意外触发Markdown格式化
-        if (isComposing && (e.key === 'Enter' || e.key === 'Tab')) {
+        if (isComposing && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'Backspace')) {
             console.log(`组合输入中检测到格式键: ${e.key}`);
-            e.preventDefault();
-            e.stopPropagation();
+            
+            // 对于退格键，需要特殊处理，允许删除待处理的特殊字符
+            if (e.key === 'Backspace' && pendingChars.current.length > 0) {
+                pendingChars.current = pendingChars.current.slice(0, -1);
+                console.log(`删除待处理字符，剩余: ${pendingChars.current}`);
+            } else {
+                // 对于其他格式键，阻止默认行为
+                e.preventDefault();
+                e.stopPropagation();
+            }
             return;
         }
-    }, [isComposing]);
+    }, [isComposing, editorEl]);
 
     // 自定义onChange处理，确保在组合输入期间不会打断输入
     const handleEditorChange = useCallback(
         (value: () => string) => {
             // 如果正在组合输入或有待处理字符，不立即触发onChange
-            if (isComposing || pendingChars.current) {
-                console.log('组合输入中或有待处理字符，延迟处理onChange');
+            if (isComposing) {
+                console.log('组合输入中，延迟处理onChange');
+                return;
+            }
+            
+            // 如果有待处理字符但不在组合状态，可能是刚刚结束组合
+            if (pendingChars.current) {
+                console.log('有待处理字符，延迟处理onChange');
+                // 延迟处理onChange，确保待处理字符先被插入
+                setTimeout(() => {
+                    if (!isComposing && !pendingChars.current) {
+                        console.log('延迟处理onChange');
+                        onEditorChange(value);
+                    }
+                }, 50);
                 return;
             }
             
@@ -143,6 +184,29 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         },
         [isComposing, onEditorChange]
     );
+    
+    // 添加处理Markdown格式化命令的函数
+    const handleMarkdownCommand = useCallback((command: string) => {
+        if (!editorEl.current || !editorEl.current.view) return;
+        
+        console.log(`处理Markdown命令: ${command}`);
+        const { state, dispatch } = editorEl.current.view;
+        
+        // 根据命令类型执行相应操作
+        switch (command) {
+            case '*':
+            case '**':
+                // 强制刷新视图，确保格式化正确应用
+                setTimeout(() => {
+                    if (editorEl.current && editorEl.current.view) {
+                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                    }
+                }, 10);
+                break;
+            default:
+                break;
+        }
+    }, [editorEl]);
 
     return (
         <>
