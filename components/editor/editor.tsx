@@ -212,7 +212,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 // 在编辑器中显示视觉反馈，但不实际插入字符
                 const { state } = editorEl.current.view;
                 const { selection } = state;
-                const pos = selection.$from.pos;
                 
                 // 在当前位置显示一个闪烁的光标，提示用户命令已被捕获
                 editorEl.current.view.dispatch(state.tr.setSelection(selection));
