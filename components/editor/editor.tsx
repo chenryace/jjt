@@ -115,8 +115,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                     const storedChars = localStorage.getItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
                     
                     if (storedChars && editorEl.current && editorEl.current.view) {
-                        const { state, dispatch } = editorEl.current.view;
-                        
                         console.log(`从localStorage恢复特殊字符: ${storedChars}`);
                         
                         // 处理特殊字符
@@ -240,7 +238,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (!editorEl.current || !editorEl.current.view) return;
         
         console.log(`处理Markdown命令: ${command}`);
-        const { state, dispatch } = editorEl.current.view;
         
         // 根据命令类型执行相应操作
         switch (command) {
