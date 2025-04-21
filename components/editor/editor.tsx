@@ -52,9 +52,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         console.log('输入法组合结束');
         setIsComposing(false);
         
-        // 组合结束后，可以在这里添加额外的处理逻辑
-        // 例如，强制更新编辑器内容
-    }, []);
+        // 组合结束后，强制更新编辑器视图以确保斜杠命令正常工作
+        if (editorEl.current && editorEl.current.view) {
+            setTimeout(() => {
+                // 使用setTimeout确保组合结束后再触发更新
+                editorEl.current?.view?.dispatch(editorEl.current.view.state.tr);
+            }, 0);
+        }
+    }, [editorEl]);
 
     // 添加编辑器DOM引用的事件监听
     useEffect(() => {
@@ -74,29 +79,53 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             editorDom.removeEventListener('compositionend', handleCompositionEnd);
         };
     }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd]);
+    
+    // 自定义键盘事件处理，解决中文输入法下斜杠命令问题
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        // 如果不是在组合输入状态，则不需要特殊处理
+        if (!isComposing) return;
+        
+        // 在组合输入状态下，如果按下斜杠键，需要特殊处理
+        if (e.key === '/' && editorEl.current && editorEl.current.view) {
+            // 阻止默认行为
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // 等待组合输入结束后再插入斜杠
+            setTimeout(() => {
+                if (editorEl.current && editorEl.current.view) {
+                    // 手动插入斜杠字符
+                    const { state, dispatch } = editorEl.current.view;
+                    dispatch(state.tr.insertText('/'));
+                }
+            }, 10);
+        }
+    }, [isComposing, editorEl]);
 
     return (
         <>
-            <MarkdownEditor
-                readOnly={readOnly}
-                id={note?.id}
-                ref={editorEl}
-                value={mounted ? note?.content : ''}
-                onChange={onEditorChange}
-                placeholder={dictionary.editorPlaceholder}
-                theme={editorTheme}
-                uploadImage={(file) => onUploadImage(file, note?.id)}
-                onSearchLink={onSearchLink}
-                onCreateLink={onCreateLink}
-                onClickLink={onClickLink}
-                onHoverLink={onHoverLink}
-                onShowToast={toast}
-                dictionary={dictionary}
-                tooltip={Tooltip}
-                extensions={extensions}
-                className="px-4 md:px-0"
-                embeds={embeds}
-            />
+            <div onKeyDown={handleKeyDown}>
+                <MarkdownEditor
+                    readOnly={readOnly}
+                    id={note?.id}
+                    ref={editorEl}
+                    value={mounted ? note?.content : ''}
+                    onChange={onEditorChange}
+                    placeholder={dictionary.editorPlaceholder}
+                    theme={editorTheme}
+                    uploadImage={(file) => onUploadImage(file, note?.id)}
+                    onSearchLink={onSearchLink}
+                    onCreateLink={onCreateLink}
+                    onClickLink={onClickLink}
+                    onHoverLink={onHoverLink}
+                    onShowToast={toast}
+                    dictionary={dictionary}
+                    tooltip={Tooltip}
+                    extensions={extensions}
+                    className="px-4 md:px-0"
+                    embeds={embeds}
+                />
+            </div>
             <style jsx global>{`
                 .ProseMirror ul {
                     list-style-type: disc;
