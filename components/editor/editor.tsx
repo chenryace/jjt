@@ -58,12 +58,15 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (slashCommandPending && editorEl.current && editorEl.current.view) {
             setTimeout(() => {
                 // 手动插入斜杠字符
-                const { state, dispatch } = editorEl.current.view;
-                dispatch(state.tr.insertText('/'));
-                // 重置待处理状态
-                setSlashCommandPending(false);
-                // 强制更新视图以触发斜杠命令菜单
-                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                // 添加空值检查，确保editorEl.current和view都存在
+                if (editorEl.current && editorEl.current.view) {
+                    const { state, dispatch } = editorEl.current.view;
+                    dispatch(state.tr.insertText('/'));
+                    // 重置待处理状态
+                    setSlashCommandPending(false);
+                    // 强制更新视图以触发斜杠命令菜单
+                    editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                }
             }, 10);
         } else if (editorEl.current && editorEl.current.view) {
             // 即使没有待处理的斜杠命令，也强制更新编辑器视图
@@ -92,28 +95,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         };
     }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd]);
     
-    // 自定义键盘事件处理，解决中文输入法下斜杠命令问题
-    const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
-        // 如果在组合输入状态下按下斜杠键
-        if (isComposing && e.key === '/') {
-            console.log('组合输入中检测到斜杠键');
-            // 阻止默认行为
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // 标记有一个待处理的斜杠命令
-            setSlashCommandPending(true);
-            return;
-        }
-        
-        // 处理其他键盘事件
-        if (isComposing && (e.key === '#' || e.key === '*' || e.key === '>' || e.key === '`')) {
-            // 对于其他Markdown语法字符，也进行特殊处理
-            console.log(`组合输入中检测到特殊字符: ${e.key}`);
-            // 不阻止默认行为，但标记为组合输入中
-        }
-    }, [isComposing]);
-
     // 自定义键盘事件处理，解决中文输入法下斜杠命令问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
         // 如果在组合输入状态下按下斜杠键
