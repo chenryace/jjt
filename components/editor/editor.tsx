@@ -98,7 +98,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         needsSpecialCharHandling.current = false;
     }, []);
 
-    const handleCompositionEnd = useCallback((e: CompositionEvent) => {
+    const handleCompositionEnd = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
         console.log('输入法组合结束');
         
         // 记录组合输入结束时间
