@@ -98,7 +98,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         needsSpecialCharHandling.current = false;
     }, []);
 
-    const handleCompositionEnd = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
+    const handleCompositionEnd = useCallback((e: CompositionEvent) => {
         console.log('输入法组合结束');
         
         // 记录组合输入结束时间
@@ -147,19 +147,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (!editorDom) return;
 
         // 添加组合事件监听
-        const handleNativeCompositionStart = () => handleCompositionStart();
-        const handleNativeCompositionEnd = (e: CompositionEvent) => {
-            handleCompositionEnd({
-                ...e,
-                nativeEvent: e,
-                isDefaultPrevented: () => false,
-                isPropagationStopped: () => false,
-                persist: () => {}
-            } as React.CompositionEvent<HTMLDivElement>);
-        };
-
-        editorDom.addEventListener('compositionstart', handleNativeCompositionStart);
-        editorDom.addEventListener('compositionend', handleNativeCompositionEnd);
+        editorDom.addEventListener('compositionstart', handleCompositionStart);
+        editorDom.addEventListener('compositionend', handleCompositionEnd);
         
         // 创建MutationObserver来监听DOM变化
         const observer = new MutationObserver((mutations) => {
@@ -228,8 +217,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
 
         return () => {
             // 清理事件监听和MutationObserver
-            editorDom.removeEventListener('compositionstart', handleNativeCompositionStart);
-            editorDom.removeEventListener('compositionend', handleNativeCompositionEnd);
+            editorDom.removeEventListener('compositionstart', handleCompositionStart);
+            editorDom.removeEventListener('compositionend', handleCompositionEnd);
             if (observerRef.current) {
                 observerRef.current.disconnect();
                 observerRef.current = null;
