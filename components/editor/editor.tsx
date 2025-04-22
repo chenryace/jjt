@@ -192,6 +192,13 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 定义需要特殊处理的Markdown语法字符
         const specialChars = ['/', '#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
         
+        // 处理通过数字键选择候选词的情况
+        if (isComposing && e.key >= '1' && e.key <= '9') {
+            console.log(`组合输入中通过数字键选择候选词: ${e.key}`);
+            // 不阻止默认行为，让输入法正常处理
+            return;
+        }
+        
         // 如果编辑器状态被锁定，且按下的是Enter或Backspace，则阻止默认行为
         if (isEditorLocked.current && (e.key === 'Enter' || e.key === 'Backspace')) {
             console.log(`编辑器锁定中，阻止键: ${e.key}`);
