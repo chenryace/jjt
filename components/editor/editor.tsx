@@ -1,6 +1,10 @@
 import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
-import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
+// 使用命名导入语法，确保TypeScript能正确识别组件的使用
+import MarkdownEditorComponent from '@notea/rich-markdown-editor';
+import { Props } from '@notea/rich-markdown-editor';
+// 创建别名以确保编译器识别组件的使用
+const MarkdownEditor = MarkdownEditorComponent;
 import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
 import Tooltip from './tooltip';
