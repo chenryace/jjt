@@ -313,7 +313,39 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 />
             </div>
             <style jsx global>{`
-                // ... existing code ...
+                .ProseMirror ul {
+                    list-style-type: disc;
+                }
+
+                .ProseMirror ol {
+                    list-style-type: decimal;
+                }
+
+                .ProseMirror {
+                    ${hasMinHeight
+                        ? `min-height: calc(${
+                              height ? height + 'px' : '100vh'
+                          } - 14rem);`
+                        : ''}
+                    padding-bottom: 10rem;
+                }
+
+                .ProseMirror h1 {
+                    font-size: 2.8em;
+                }
+                .ProseMirror h2 {
+                    font-size: 1.8em;
+                }
+                .ProseMirror h3 {
+                    font-size: 1.5em;
+                }
+                .ProseMirror a:not(.bookmark) {
+                    text-decoration: underline;
+                }
+
+                .ProseMirror .image .ProseMirror-selectednode img {
+                    pointer-events: unset;
+                }
             `}</style>
         </>
     );
