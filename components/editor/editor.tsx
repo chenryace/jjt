@@ -73,13 +73,28 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 break;
             case '/':
                 // 处理斜杠命令，确保命令菜单显示
-                setTimeout(() => {
+                // 使用requestAnimationFrame代替setTimeout，确保在下一帧渲染前处理
+                requestAnimationFrame(() => {
                     if (editorEl.current && editorEl.current.view) {
-                        // 模拟斜杠命令触发
+                        // 检查编辑器状态是否已经有斜杠
                         const { state } = editorEl.current.view;
-                        editorEl.current.view.dispatch(state.tr.insertText('/'));
+                        const { selection } = state;
+                        const { from } = selection;
+                        
+                        // 获取当前位置前的文本
+                        const textBefore = state.doc.textBetween(
+                            Math.max(0, from - 1),
+                            from,
+                            ''
+                        );
+                        
+                        // 只有当前位置前没有斜杠时才插入
+                        if (textBefore !== '/') {
+                            // 模拟斜杠命令触发
+                            editorEl.current.view.dispatch(state.tr.insertText('/'));
+                        }
                     }
-                }, 10);
+                });
                 break;
             default:
                 break;
@@ -107,6 +122,29 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 如果有特殊字符需要处理，设置标志
         if (pendingChars.current) {
             needsSpecialCharHandling.current = true;
+            console.log(`组合输入结束，待处理特殊字符: ${pendingChars.current}`);
+            
+            // 检查是否包含斜杠，如果包含，需要特殊处理
+            if (pendingChars.current.includes('/') && editorEl.current && editorEl.current.view) {
+                // 检查编辑器状态，避免重复插入斜杠
+                const { state } = editorEl.current.view;
+                const { selection } = state;
+                const { from } = selection;
+                
+                // 获取当前位置前的文本
+                const textBefore = state.doc.textBetween(
+                    Math.max(0, from - 1),
+                    from,
+                    ''
+                );
+                
+                // 如果前一个字符已经是斜杠，则不再处理
+                if (textBefore === '/') {
+                    console.log('组合输入结束: 检测到已有斜杠，跳过处理');
+                    needsSpecialCharHandling.current = false;
+                    pendingChars.current = "";
+                }
+            }
         }
         
         // 重置组合状态
@@ -131,6 +169,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 isEditorLocked.current = false;
             }
         });
+    }
     }, [editorEl]);
 
     // 添加编辑器DOM引用的事件监听和MutationObserver
@@ -151,18 +190,43 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             if (needsSpecialCharHandling.current && pendingChars.current) {
                 console.log('输入事件：处理待处理的特殊字符', pendingChars.current);
                 
-                // 立即处理特殊字符，不依赖MutationObserver的延迟
-                if (pendingChars.current.includes('/')) {
-                    handleMarkdownCommand('/');
-                } else if (pendingChars.current.includes('*')) {
-                    handleMarkdownCommand('*');
-                } else if (pendingChars.current.includes('#')) {
-                    handleMarkdownCommand('#');
-                }
+                // 计算自上次组合输入结束的时间差
+                const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
                 
-                // 重置待处理状态
-                needsSpecialCharHandling.current = false;
-                pendingChars.current = "";
+                // 如果时间差小于100ms，使用requestAnimationFrame延迟处理
+                // 这样可以确保编辑器内部状态已经稳定
+                if (timeSinceCompositionEnd < 100) {
+                    requestAnimationFrame(() => {
+                        // 再次检查状态，确保在执行时仍然需要处理
+                        if (needsSpecialCharHandling.current && pendingChars.current) {
+                            // 立即处理特殊字符
+                            if (pendingChars.current.includes('/')) {
+                                handleMarkdownCommand('/');
+                            } else if (pendingChars.current.includes('*')) {
+                                handleMarkdownCommand('*');
+                            } else if (pendingChars.current.includes('#')) {
+                                handleMarkdownCommand('#');
+                            }
+                            
+                            // 重置待处理状态
+                            needsSpecialCharHandling.current = false;
+                            pendingChars.current = "";
+                        }
+                    });
+                } else {
+                    // 立即处理特殊字符
+                    if (pendingChars.current.includes('/')) {
+                        handleMarkdownCommand('/');
+                    } else if (pendingChars.current.includes('*')) {
+                        handleMarkdownCommand('*');
+                    } else if (pendingChars.current.includes('#')) {
+                        handleMarkdownCommand('#');
+                    }
+                    
+                    // 重置待处理状态
+                    needsSpecialCharHandling.current = false;
+                    pendingChars.current = "";
+                }
             }
             
             // 确保编辑器未锁定
@@ -188,8 +252,38 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             );
             
             if (hasTextChange) {
-                // 处理特殊字符
-                if (pendingChars.current.includes('/')) {
+                // 计算自上次组合输入结束的时间差
+                const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
+                // 计算自上次键盘操作的时间差
+                const timeSinceKeyPress = Date.now() - lastKeyPressTime.current;
+                
+                // 如果时间差太小，可能是重复处理，跳过
+                if (timeSinceCompositionEnd < 50 || timeSinceKeyPress < 50) {
+                    console.log('MutationObserver: 检测到可能的重复处理，跳过');
+                    return;
+                }
+                
+                // 检查编辑器状态，避免重复插入斜杠
+                if (pendingChars.current.includes('/') && editorEl.current && editorEl.current.view) {
+                    const { state } = editorEl.current.view;
+                    const { selection } = state;
+                    const { from } = selection;
+                    
+                    // 获取当前位置前的文本
+                    const textBefore = state.doc.textBetween(
+                        Math.max(0, from - 1),
+                        from,
+                        ''
+                    );
+                    
+                    // 如果前一个字符已经是斜杠，则不再处理
+                    if (textBefore === '/') {
+                        console.log('MutationObserver: 检测到已有斜杠，跳过处理');
+                        needsSpecialCharHandling.current = false;
+                        pendingChars.current = "";
+                        return;
+                    }
+                    
                     // 处理斜杠命令
                     handleMarkdownCommand('/');
                 } else if (pendingChars.current.includes('*')) {
@@ -311,18 +405,47 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 const { state } = editorEl.current.view;
                 const { selection } = state;
                 
+                // 设置一个标志，表示已经捕获了斜杠命令
+                needsSpecialCharHandling.current = true;
+                
                 // 在当前位置显示一个闪烁的光标，提示用户命令已被捕获
                 editorEl.current.view.dispatch(state.tr.setSelection(selection));
+                
+                // 记录捕获时间，用于后续处理
+                lastKeyPressTime.current = Date.now();
             }
             return;
         }
         
-        // 处理中文输入法下的斜杠键
+        // 处理非组合输入状态下的斜杠键
         if (!isComposing && !nativeIsComposing && e.key === '/') {
             // 确保编辑器不会被锁定
             isEditorLocked.current = false;
             
-            // 正常处理斜杠键，不需要特殊处理
+            // 检查是否需要阻止默认行为
+            // 如果编辑器内部已经有斜杠命令处理机制，则不干预
+            if (editorEl.current && editorEl.current.view) {
+                const { state } = editorEl.current.view;
+                const { selection } = state;
+                const { from } = selection;
+                
+                // 获取当前位置前的文本
+                const textBefore = state.doc.textBetween(
+                    Math.max(0, from - 1),
+                    from,
+                    ''
+                );
+                
+                // 如果前一个字符已经是斜杠，则阻止重复输入
+                if (textBefore === '/') {
+                    console.log('检测到重复的斜杠输入，阻止默认行为');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+            }
+            
+            // 正常处理斜杠键
             return;
         }
     }, [isComposing, editorEl]);
@@ -333,6 +456,22 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             // 如果正在组合输入，不立即触发onChange
             if (isComposing) {
                 console.log('组合输入中，不处理onChange');
+                return;
+            }
+            
+            // 计算自上次组合输入结束的时间差
+            const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
+            
+            // 如果组合输入刚刚结束（小于100ms），延迟处理onChange
+            // 这样可以确保特殊字符处理完成后再触发onChange
+            if (timeSinceCompositionEnd < 100) {
+                console.log('组合输入刚刚结束，延迟处理onChange');
+                requestAnimationFrame(() => {
+                    // 再次检查状态，确保在执行时不在组合输入状态
+                    if (!isComposing) {
+                        onEditorChange(value);
+                    }
+                });
                 return;
             }
             
