@@ -44,6 +44,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const isEditorLocked = useRef<boolean>(false);
     // 跟踪是否需要处理特殊字符
     const needsSpecialCharHandling = useRef<boolean>(false);
+    // 跟踪最后一次组合输入结束的时间
+    const lastCompositionEndTime = useRef<number>(0);
+    // 跟踪最后一次键盘操作的时间
+    const lastKeyPressTime = useRef<number>(0);
 
     useEffect(() => {
         if (isPreview) return;
@@ -97,6 +101,9 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const handleCompositionEnd = useCallback(() => {
         console.log('输入法组合结束');
         
+        // 记录组合输入结束时间
+        lastCompositionEndTime.current = Date.now();
+        
         // 如果有特殊字符需要处理，设置标志
         if (pendingChars.current) {
             needsSpecialCharHandling.current = true;
@@ -107,7 +114,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         // 立即解锁编辑器，不添加延迟
         isEditorLocked.current = false;
-    }, []);
+        
+        // 强制刷新编辑器状态，确保后续操作可以执行
+        setTimeout(() => {
+            if (editorEl.current && editorEl.current.view) {
+                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+            }
+        }, 10);
+    }, [editorEl]);
 
     // 添加编辑器DOM引用的事件监听和MutationObserver
     useEffect(() => {
@@ -171,7 +185,20 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 console.log('安全机制：检测到异常锁定状态，强制解锁');
                 isEditorLocked.current = false;
             }
-        }, 500); // 使用较长的间隔，避免干扰正常输入
+            
+            // 检查是否长时间未解锁
+            const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
+            if (isEditorLocked.current && timeSinceLastComposition > 300) {
+                console.log('安全机制：检测到长时间锁定，强制解锁');
+                isEditorLocked.current = false;
+            }
+            
+            // 额外检查：如果用户最近尝试过Enter或Backspace操作但被阻止，强制解锁
+            if (isEditorLocked.current && (Date.now() - lastKeyPressTime.current > 300)) {
+                console.log('安全机制：检测到可能的键盘操作被阻止，强制解锁');
+                isEditorLocked.current = false;
+            }
+        }, 300); // 减少间隔时间，提高响应速度
 
         return () => {
             // 清理事件监听和MutationObserver
@@ -192,6 +219,9 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 定义需要特殊处理的Markdown语法字符
         const specialChars = ['/', '#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
         
+        // 记录最后一次键盘操作时间
+        lastKeyPressTime.current = Date.now();
+        
         // 处理通过数字键选择候选词的情况
         if (isComposing && e.key >= '1' && e.key <= '9') {
             console.log(`组合输入中通过数字键选择候选词: ${e.key}`);
@@ -199,9 +229,36 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             return;
         }
         
+        // 处理可能的输入速度过快导致的Enter键无效问题
+        if (e.key === 'Enter' && e.nativeEvent && e.nativeEvent.isComposing) {
+            console.log('检测到可能的输入速度过快导致的Enter键');
+            // 确保编辑器不会锁定Enter键
+            isEditorLocked.current = false;
+            // 不阻止默认行为，允许Enter键正常工作
+            return;
+        }
+        
+        // 处理中文输入法下输入英文后无法换行或删除的问题
+        if ((e.key === 'Enter' || e.key === 'Backspace') && !isComposing && isEditorLocked.current) {
+            console.log(`检测到输入英文后键盘操作: ${e.key}`);
+            // 强制解锁编辑器
+            isEditorLocked.current = false;
+            // 不阻止默认行为，允许键盘操作正常工作
+            return;
+        }
+        
         // 如果编辑器状态被锁定，且按下的是Enter或Backspace，则阻止默认行为
         if (isEditorLocked.current && (e.key === 'Enter' || e.key === 'Backspace')) {
             console.log(`编辑器锁定中，阻止键: ${e.key}`);
+            
+            // 检查是否刚刚完成了组合输入
+            const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
+            if (timeSinceLastComposition < 300) {
+                console.log('检测到刚刚完成组合输入，允许键盘操作');
+                isEditorLocked.current = false;
+                return; // 允许事件继续传播
+            }
+            
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -255,6 +312,16 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             if (editorEl.current && editorEl.current.view) {
                 const { state } = editorEl.current.view;
                 editorEl.current.view.dispatch(state.tr.insertText('/'));
+                
+                // 确保编辑器不会被锁定
+                isEditorLocked.current = false;
+                
+                // 强制刷新编辑器状态，确保后续操作可以执行
+                setTimeout(() => {
+                    if (editorEl.current && editorEl.current.view) {
+                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                    }
+                }, 10);
             }
             return;
         }
