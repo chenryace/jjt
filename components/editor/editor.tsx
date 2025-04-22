@@ -98,14 +98,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         needsSpecialCharHandling.current = false;
     }, []);
 
-    const handleCompositionEnd = useCallback((e: CompositionEvent) => {
-        console.log('输入法组合结束');
-        
+    // 处理输入法组合结束的核心逻辑
+    const processCompositionEnd = useCallback((inputData: string) => {
         // 记录组合输入结束时间
         lastCompositionEndTime.current = Date.now();
-        
-        // 获取输入的数据
-        const inputData = e.data;
         
         // 检查输入类型
         const isEnglishInput = /^[a-zA-Z]+$/.test(inputData);
@@ -138,6 +134,16 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }, 10);
     }, [editorEl]);
 
+    // React 事件处理器
+    const handleReactCompositionEnd = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
+        processCompositionEnd(e.data);
+    }, [processCompositionEnd]);
+
+    // DOM 事件处理器
+    const handleDomCompositionEnd = useCallback((e: CompositionEvent) => {
+        processCompositionEnd(e.data);
+    }, [processCompositionEnd]);
+
     // 添加编辑器DOM引用的事件监听和MutationObserver
     useEffect(() => {
         if (!editorEl.current || isPreview || readOnly) return;
@@ -148,7 +154,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
 
         // 添加组合事件监听
         editorDom.addEventListener('compositionstart', handleCompositionStart);
-        editorDom.addEventListener('compositionend', handleCompositionEnd);
+        editorDom.addEventListener('compositionend', handleDomCompositionEnd);
         
         // 创建MutationObserver来监听DOM变化
         const observer = new MutationObserver((mutations) => {
@@ -218,7 +224,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         return () => {
             // 清理事件监听和MutationObserver
             editorDom.removeEventListener('compositionstart', handleCompositionStart);
-            editorDom.removeEventListener('compositionend', handleCompositionEnd);
+            editorDom.removeEventListener('compositionend', handleDomCompositionEnd);
             if (observerRef.current) {
                 observerRef.current.disconnect();
                 observerRef.current = null;
@@ -226,7 +232,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             // 清理安全定时器
             clearInterval(safetyTimer);
         };
-    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand, isComposing]);
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleDomCompositionEnd, handleMarkdownCommand, isComposing]);
 
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
@@ -377,7 +383,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             <div 
                 onKeyDown={handleKeyDown}
                 onCompositionStart={handleCompositionStart}
-                onCompositionEnd={handleCompositionEnd}
+                onCompositionEnd={handleReactCompositionEnd}
             >
                 <MarkdownEditor
                     readOnly={readOnly}
