@@ -40,8 +40,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const pendingChars = useRef<string>("");
     // 创建MutationObserver引用
     const observerRef = useRef<MutationObserver | null>(null);
-    // 跟踪组合输入结束后是否可以处理Enter键
-    const canHandleEnter = useRef<boolean>(false);
+    // 跟踪编辑器状态是否被锁定
+    const isEditorLocked = useRef<boolean>(false);
     // 跟踪是否需要处理特殊字符
     const needsSpecialCharHandling = useRef<boolean>(false);
 
@@ -88,8 +88,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         setIsComposing(true);
         // 清空待处理字符
         pendingChars.current = "";
-        // 重置Enter键处理标志
-        canHandleEnter.current = false;
+        // 锁定编辑器状态
+        isEditorLocked.current = true;
         // 重置特殊字符处理标志
         needsSpecialCharHandling.current = false;
     }, []);
@@ -102,13 +102,11 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             needsSpecialCharHandling.current = true;
         }
         
-        // 设置延迟后可以处理Enter键
-        setTimeout(() => {
-            canHandleEnter.current = true;
-        }, 50);
-        
         // 重置组合状态
         setIsComposing(false);
+        
+        // 立即解锁编辑器，不添加延迟
+        isEditorLocked.current = false;
     }, []);
 
     // 添加编辑器DOM引用的事件监听和MutationObserver
@@ -166,6 +164,15 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             characterDataOldValue: true
         });
 
+        // 添加安全机制，防止编辑器永久锁定
+        const safetyTimer = setInterval(() => {
+            // 如果编辑器锁定但不在组合输入状态，强制解锁
+            if (isEditorLocked.current && !isComposing) {
+                console.log('安全机制：检测到异常锁定状态，强制解锁');
+                isEditorLocked.current = false;
+            }
+        }, 500); // 使用较长的间隔，避免干扰正常输入
+
         return () => {
             // 清理事件监听和MutationObserver
             editorDom.removeEventListener('compositionstart', handleCompositionStart);
@@ -174,14 +181,24 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 observerRef.current.disconnect();
                 observerRef.current = null;
             }
+            // 清理安全定时器
+            clearInterval(safetyTimer);
         };
-    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand]);
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand, isComposing]);
 
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
         // 定义需要特殊处理的Markdown语法字符
         const specialChars = ['/', '#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
+        
+        // 如果编辑器状态被锁定，且按下的是Enter或Backspace，则阻止默认行为
+        if (isEditorLocked.current && (e.key === 'Enter' || e.key === 'Backspace')) {
+            console.log(`编辑器锁定中，阻止键: ${e.key}`);
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
         
         // 如果在组合输入状态下按下特殊字符
         if (isComposing && specialChars.includes(e.key)) {
@@ -221,35 +238,17 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             return;
         }
         
-        // 处理组合输入刚结束后的Enter键
-        if (!isComposing && e.key === 'Enter' && !canHandleEnter.current) {
-            console.log('组合输入刚结束，延迟处理Enter键');
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // 延迟处理Enter键
-            setTimeout(() => {
-                if (editorEl.current && editorEl.current.view) {
-                    const { state } = editorEl.current.view;
-                    editorEl.current.view.dispatch(state.tr.insertText('\n'));
-                }
-            }, 50);
-            return;
-        }
-        
         // 处理中文输入法下的斜杠键
         if (!isComposing && e.key === '/' && e.nativeEvent && e.nativeEvent.isComposing) {
             console.log('检测到中文输入法下的斜杠键');
             e.preventDefault();
             e.stopPropagation();
             
-            // 延迟插入斜杠，确保不会被输入法干扰
-            setTimeout(() => {
-                if (editorEl.current && editorEl.current.view) {
-                    const { state } = editorEl.current.view;
-                    editorEl.current.view.dispatch(state.tr.insertText('/'));
-                }
-            }, 10);
+            // 立即插入斜杠，确保不会被输入法干扰
+            if (editorEl.current && editorEl.current.view) {
+                const { state } = editorEl.current.view;
+                editorEl.current.view.dispatch(state.tr.insertText('/'));
+            }
             return;
         }
     }, [isComposing, editorEl]);
@@ -268,7 +267,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 console.log('需要处理特殊字符，延迟处理onChange');
                 setTimeout(() => {
                     onEditorChange(value);
-                }, 50);
+                }, 10); // 减少延迟时间
                 return;
             }
             
