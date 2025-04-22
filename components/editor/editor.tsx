@@ -10,9 +10,6 @@ import { useToast } from 'libs/web/hooks/use-toast';
 import { useDictionary } from './dictionary';
 import { useEmbeds } from './embeds';
 
-// 本地存储键前缀
-const STORAGE_KEY_PREFIX = 'notea_ime_';
-
 export interface EditorProps extends Pick<Props, 'readOnly'> {
     isPreview?: boolean;
 }
@@ -43,14 +40,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const pendingChars = useRef<string>("");
     // 创建MutationObserver引用
     const observerRef = useRef<MutationObserver | null>(null);
-    // 跟踪上次内容变化时间
-    const lastMutationTime = useRef<number>(0);
-    // 跟踪是否有待处理的变化
-    const hasPendingChanges = useRef<boolean>(false);
     // 跟踪组合输入结束后是否可以处理Enter键
     const canHandleEnter = useRef<boolean>(false);
-    // 跟踪最后一次组合输入结束的时间
-    const lastCompositionEndTime = useRef<number>(0);
+    // 跟踪是否需要处理特殊字符
+    const needsSpecialCharHandling = useRef<boolean>(false);
 
     useEffect(() => {
         if (isPreview) return;
@@ -97,32 +90,26 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         pendingChars.current = "";
         // 重置Enter键处理标志
         canHandleEnter.current = false;
+        // 重置特殊字符处理标志
+        needsSpecialCharHandling.current = false;
     }, []);
 
     const handleCompositionEnd = useCallback(() => {
         console.log('输入法组合结束');
         
-        // 标记有待处理的变化，但不立即处理
-        // MutationObserver会在DOM实际变化后处理
-        hasPendingChanges.current = true;
-        
-        // 保存组合结束时间，用于MutationObserver判断
-        lastMutationTime.current = Date.now();
-        lastCompositionEndTime.current = Date.now();
-        
-        // 如果有特殊字符，保存到localStorage以便在DOM变化后恢复
-        if (pendingChars.current && note?.id) {
-            localStorage.setItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`, pendingChars.current);
+        // 如果有特殊字符需要处理，设置标志
+        if (pendingChars.current) {
+            needsSpecialCharHandling.current = true;
         }
         
         // 设置延迟后可以处理Enter键
         setTimeout(() => {
             canHandleEnter.current = true;
-        }, 100);
+        }, 50);
         
         // 重置组合状态
         setIsComposing(false);
-    }, [note?.id]);
+    }, []);
 
     // 添加编辑器DOM引用的事件监听和MutationObserver
     useEffect(() => {
@@ -138,8 +125,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         // 创建MutationObserver来监听DOM变化
         const observer = new MutationObserver((mutations) => {
-            // 如果没有待处理的变化，直接返回
-            if (!hasPendingChanges.current) return;
+            // 如果不需要处理特殊字符，直接返回
+            if (!needsSpecialCharHandling.current) return;
             
             // 检查是否有文本内容变化
             const hasTextChange = mutations.some(mutation => 
@@ -150,37 +137,21 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             );
             
             if (hasTextChange) {
-                // 计算自上次组合结束后经过的时间
-                const timeSinceLastMutation = Date.now() - lastMutationTime.current;
-                
-                // 如果DOM变化发生在组合结束后的合理时间内（150ms），处理特殊字符
-                if (timeSinceLastMutation < 150 && note?.id) {
-                    // 从localStorage获取待处理的特殊字符
-                    const storedChars = localStorage.getItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
-                    
-                    if (storedChars && editorEl.current && editorEl.current.view) {
-                        console.log(`从localStorage恢复特殊字符: ${storedChars}`);
-                        
-                        // 处理特殊字符
-                        if (storedChars.includes('/')) {
-                            // 处理斜杠命令
-                            handleMarkdownCommand('/');
-                        } else if (storedChars.includes('*')) {
-                            // 处理加粗/斜体命令
-                            handleMarkdownCommand('*');
-                        } else if (storedChars.includes('#')) {
-                            // 处理标题命令
-                            handleMarkdownCommand('#');
-                        }
-                        
-                        // 清除localStorage中的数据
-                        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
-                    }
-                    
-                    // 重置待处理状态
-                    hasPendingChanges.current = false;
-                    pendingChars.current = "";
+                // 处理特殊字符
+                if (pendingChars.current.includes('/')) {
+                    // 处理斜杠命令
+                    handleMarkdownCommand('/');
+                } else if (pendingChars.current.includes('*')) {
+                    // 处理加粗/斜体命令
+                    handleMarkdownCommand('*');
+                } else if (pendingChars.current.includes('#')) {
+                    // 处理标题命令
+                    handleMarkdownCommand('#');
                 }
+                
+                // 重置待处理状态
+                needsSpecialCharHandling.current = false;
+                pendingChars.current = "";
             }
         });
         
@@ -203,13 +174,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 observerRef.current.disconnect();
                 observerRef.current = null;
             }
-            
-            // 清理localStorage
-            if (note?.id) {
-                localStorage.removeItem(`${STORAGE_KEY_PREFIX}${note.id}_chars`);
-            }
         };
-    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, note?.id, handleMarkdownCommand]);
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand]);
 
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
@@ -256,24 +222,19 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }
         
         // 处理组合输入刚结束后的Enter键
-        if (!isComposing && e.key === 'Enter') {
-            const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
+        if (!isComposing && e.key === 'Enter' && !canHandleEnter.current) {
+            console.log('组合输入刚结束，延迟处理Enter键');
+            e.preventDefault();
+            e.stopPropagation();
             
-            // 如果组合输入刚结束不久（小于100ms）且还不能处理Enter键
-            if (timeSinceCompositionEnd < 100 && !canHandleEnter.current) {
-                console.log('组合输入刚结束，延迟处理Enter键');
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // 延迟处理Enter键
-                setTimeout(() => {
-                    if (editorEl.current && editorEl.current.view) {
-                        const { state } = editorEl.current.view;
-                        editorEl.current.view.dispatch(state.tr.insertText('\n'));
-                    }
-                }, 50);
-                return;
-            }
+            // 延迟处理Enter键
+            setTimeout(() => {
+                if (editorEl.current && editorEl.current.view) {
+                    const { state } = editorEl.current.view;
+                    editorEl.current.view.dispatch(state.tr.insertText('\n'));
+                }
+            }, 50);
+            return;
         }
         
         // 处理中文输入法下的斜杠键
@@ -302,16 +263,9 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 return;
             }
             
-            // 如果有待处理的变化，不立即触发onChange
-            if (hasPendingChanges.current) {
-                console.log('有待处理的DOM变化，延迟处理onChange');
-                return;
-            }
-            
-            // 检查是否刚结束组合输入
-            const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
-            if (timeSinceCompositionEnd < 50) {
-                console.log('组合输入刚结束，延迟处理onChange');
+            // 如果需要处理特殊字符，不立即触发onChange
+            if (needsSpecialCharHandling.current) {
+                console.log('需要处理特殊字符，延迟处理onChange');
                 setTimeout(() => {
                     onEditorChange(value);
                 }, 50);
