@@ -87,7 +87,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     }, [editorEl]);
 
     // 添加组合事件处理函数 - 使用事件驱动方式处理输入法状态
-    const handleCompositionStart = useCallback((e: CompositionEvent) => {
+    const handleCompositionStart = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
         console.log('输入法组合开始', e.type);
         setIsComposing(true);
         // 清空待处理字符
@@ -98,7 +98,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         needsSpecialCharHandling.current = false;
     }, []);
 
-    const handleCompositionUpdate = useCallback((e: CompositionEvent) => {
+    const handleCompositionUpdate = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
         // 记录组合输入更新，可以获取当前正在输入的文本
         console.log('输入法组合更新', e.data);
         
@@ -112,7 +112,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }
     }, []);
 
-    const handleCompositionEnd = useCallback((e: CompositionEvent) => {
+    const handleCompositionEnd = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
         console.log('输入法组合结束', e.data);
         
         // 记录组合输入结束时间和最终文本
@@ -154,9 +154,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (!editorDom) return;
 
         // 添加组合事件监听 - 包括组合更新事件
-        editorDom.addEventListener('compositionstart', handleCompositionStart);
-        editorDom.addEventListener('compositionupdate', handleCompositionUpdate);
-        editorDom.addEventListener('compositionend', handleCompositionEnd);
+        // 注意：这里不再需要原生事件监听，因为我们已经在React组件上添加了事件处理
         
         // 创建增强版MutationObserver来监听DOM变化
         const observer = new MutationObserver((mutations) => {
@@ -253,10 +251,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }, 200); // 减少间隔时间，提高响应速度
 
         return () => {
-            // 清理事件监听和MutationObserver
-            editorDom.removeEventListener('compositionstart', handleCompositionStart);
-            editorDom.removeEventListener('compositionupdate', handleCompositionUpdate);
-            editorDom.removeEventListener('compositionend', handleCompositionEnd);
+            // 清理MutationObserver
             if (observerRef.current) {
                 observerRef.current.disconnect();
                 observerRef.current = null;
