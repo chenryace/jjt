@@ -98,7 +98,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         needsSpecialCharHandling.current = false;
     }, []);
 
-    const handleCompositionEnd = useCallback((e: React.CompositionEvent<HTMLDivElement>) => {
+    const handleCompositionEnd = useCallback((e: CompositionEvent) => {
         console.log('输入法组合结束');
         
         // 记录组合输入结束时间
@@ -147,8 +147,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (!editorDom) return;
 
         // 添加组合事件监听
-        editorDom.addEventListener('compositionstart', handleCompositionStart);
-        editorDom.addEventListener('compositionend', handleCompositionEnd);
+        editorDom.addEventListener('compositionstart', handleCompositionStart as EventListener);
+        editorDom.addEventListener('compositionend', handleCompositionEnd as EventListener);
         
         // 创建MutationObserver来监听DOM变化
         const observer = new MutationObserver((mutations) => {
@@ -217,8 +217,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
 
         return () => {
             // 清理事件监听和MutationObserver
-            editorDom.removeEventListener('compositionstart', handleCompositionStart);
-            editorDom.removeEventListener('compositionend', handleCompositionEnd);
+            editorDom.removeEventListener('compositionstart', handleCompositionStart as EventListener);
+            editorDom.removeEventListener('compositionend', handleCompositionEnd as EventListener);
             if (observerRef.current) {
                 observerRef.current.disconnect();
                 observerRef.current = null;
