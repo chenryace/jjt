@@ -12,7 +12,6 @@ export interface EditorProps {
     content?: string;  // 修改为可选属性，与NoteModel保持一致
   } & Partial<NoteModel>;
   localContent?: string;
-  isPreview?: boolean;
   readOnly?: boolean;
   className?: string;
   minHeight?: number;
@@ -29,8 +28,6 @@ export interface EditorProps {
 const Editor: FC<EditorProps> = ({
   note,
   localContent,
-  isPreview,
-  readOnly = false,
   className,
   minHeight,
   onSave,
@@ -43,7 +40,7 @@ const Editor: FC<EditorProps> = ({
 }) => {
   const height = use100vh();
   const mounted = useMounted();
-  const [hasMinHeight, setHasMinHeight] = useState(true);
+  const [hasMinHeight] = useState(true);
   
   // 创建编辑器实例，确保content不为undefined
   const editor = useMarkdownEditor({
@@ -67,19 +64,22 @@ const Editor: FC<EditorProps> = ({
   useEffect(() => {
     if (!editor) return;
 
-    const unsubscribe = editor.on('change', (value) => {
+    // 监听内容变化
+    editor.on('change', (value) => {
+      const content = value || '';
       if (onContentChange) {
-        onContentChange(value);
+        onContentChange(content);
       }
       
       // 通知需要保存
       if (onNeedSave) {
-        onNeedSave(value);
+        onNeedSave(content);
       }
     });
 
+    // 不需要显式取消订阅，编辑器实例会处理清理工作
     return () => {
-      unsubscribe();
+      // 清理工作由编辑器实例自行处理
     };
   }, [editor, onContentChange, onNeedSave]);
 
@@ -112,15 +112,15 @@ const Editor: FC<EditorProps> = ({
     [editor, onCtrlEnter, onEscape, onSave]
   );
 
-  // 处理失焦事件
-  const handleBlur = useCallback(() => {
+  // 注意：由于MarkdownEditorView不支持onBlur和onFocus属性，
+  // 我们需要在父级div上处理这些事件
+  const handleDivBlur = useCallback(() => {
     if (onBlur) {
       onBlur();
     }
   }, [onBlur]);
 
-  // 处理聚焦事件
-  const handleFocus = useCallback(() => {
+  const handleDivFocus = useCallback(() => {
     if (onFocus) {
       onFocus();
     }
@@ -142,12 +142,12 @@ const Editor: FC<EditorProps> = ({
     >
       <div 
         onKeyDown={handleKeyDown}
+        onBlur={handleDivBlur}
+        onFocus={handleDivFocus}
       >
         <MarkdownEditorView
           editor={editor}
-          readOnly={readOnly}
-          onBlur={handleBlur}
-          onFocus={handleFocus}
+          stickyToolbar={true}
         />
       </div>
     </div>
