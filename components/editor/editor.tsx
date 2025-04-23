@@ -1,16 +1,10 @@
 import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { use100vh } from 'react-div-100vh';
 import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
-import { configure } from '@gravity-ui/markdown-editor';
 import useMounted from 'libs/web/hooks/use-mounted';
 import { NoteModel } from 'libs/shared/note';
 
-configure({
-  // 配置编辑器全局设置
-  wysiwygConfig: {
-    // 可以添加全局配置
-  },
-});
+// 移除configure调用，因为它只用于语言配置，不是必需的
 
 export interface EditorProps {
   note?: {
