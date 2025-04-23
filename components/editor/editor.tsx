@@ -44,12 +44,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const isEditorLocked = useRef<boolean>(false);
     // 跟踪是否需要处理特殊字符
     const needsSpecialCharHandling = useRef<boolean>(false);
-    // 跟踪最后一次组合输入结束的时间
-    const lastCompositionEndTime = useRef<number>(0);
-    // 跟踪最后一次键盘操作的时间
-    const lastKeyPressTime = useRef<number>(0);
     // 跟踪组合输入的内容类型（中文/英文）
     const compositionType = useRef<'chinese' | 'english' | null>(null);
+    // 跟踪组合输入结束后的首次键盘事件
+    const isFirstKeyAfterComposition = useRef<boolean>(false);
 
     useEffect(() => {
         if (isPreview) return;
@@ -98,6 +96,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         isEditorLocked.current = true;
         // 重置特殊字符处理标志
         needsSpecialCharHandling.current = false;
+        // 重置首次键盘事件标志
+        isFirstKeyAfterComposition.current = false;
         
         // 根据首个字符判断输入类型
         if (e.data && /[\u4e00-\u9fa5]/.test(e.data)) {
@@ -116,11 +116,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }
     }, []);
 
-    const handleCompositionEnd = useCallback((e: ReactCompositionEvent<HTMLDivElement>) => {
+    const handleCompositionEnd = useCallback((_e: ReactCompositionEvent<HTMLDivElement>) => {
         console.log('输入法组合结束');
-        
-        // 记录组合输入结束时间
-        lastCompositionEndTime.current = Date.now();
         
         // 如果有特殊字符需要处理，设置标志
         if (pendingChars.current) {
@@ -132,6 +129,9 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         // 立即解锁编辑器，不添加延迟
         isEditorLocked.current = false;
+        
+        // 标记下一个键盘事件为组合后的首次事件
+        isFirstKeyAfterComposition.current = true;
         
         // 强制刷新编辑器状态，确保后续操作可以执行
         setTimeout(() => {
@@ -204,20 +204,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 console.log('安全机制：检测到异常锁定状态，强制解锁');
                 isEditorLocked.current = false;
             }
-            
-            // 检查是否长时间未解锁
-            const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
-            if (isEditorLocked.current && timeSinceLastComposition > 300) {
-                console.log('安全机制：检测到长时间锁定，强制解锁');
-                isEditorLocked.current = false;
-            }
-            
-            // 额外检查：如果用户最近尝试过Enter或Backspace操作但被阻止，强制解锁
-            if (isEditorLocked.current && (Date.now() - lastKeyPressTime.current > 300)) {
-                console.log('安全机制：检测到可能的键盘操作被阻止，强制解锁');
-                isEditorLocked.current = false;
-            }
-        }, 300); // 减少间隔时间，提高响应速度
+        }, 1000); // 安全检查间隔
 
         return () => {
             // 清理事件监听和MutationObserver
@@ -239,12 +226,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 定义需要特殊处理的Markdown语法字符
         const specialChars = ['/', '#', '*', '>', '`', '-', '+', '=', '[', ']', '(', ')', '!', '@'];
         
-        // 记录最后一次键盘操作时间
-        lastKeyPressTime.current = Date.now();
-        
-        // 计算自上次组合输入结束后经过的时间
-        const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
-        
         // 处理通过数字键选择候选词的情况
         if (isComposing && e.key >= '1' && e.key <= '9') {
             console.log(`组合输入中通过数字键选择候选词: ${e.key}`);
@@ -263,9 +244,11 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         // 处理中文输入法下输入英文后无法换行或删除的问题
         if ((e.key === 'Enter' || e.key === 'Backspace') && !isComposing) {
-            // 如果是组合输入刚结束后的短时间内
-            if (timeSinceLastComposition < 300) {
-                console.log(`检测到组合输入后的键盘操作: ${e.key}`);
+            // 如果是组合输入刚结束后的首次键盘事件
+            if (isFirstKeyAfterComposition.current) {
+                console.log(`检测到组合输入后的首次键盘操作: ${e.key}`);
+                // 重置首次键盘事件标志
+                isFirstKeyAfterComposition.current = false;
                 // 确保编辑器不会锁定
                 isEditorLocked.current = false;
                 // 不阻止默认行为，允许键盘操作正常工作
@@ -286,10 +269,10 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         if (isEditorLocked.current && (e.key === 'Enter' || e.key === 'Backspace')) {
             console.log(`编辑器锁定中，阻止键: ${e.key}`);
             
-            // 检查是否刚刚完成了组合输入
-            const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
-            if (timeSinceLastComposition < 300) {
+            // 如果是组合输入刚结束后的首次键盘事件
+            if (isFirstKeyAfterComposition.current) {
                 console.log('检测到刚刚完成组合输入，允许键盘操作');
+                isFirstKeyAfterComposition.current = false;
                 isEditorLocked.current = false;
                 return; // 允许事件继续传播
             }
@@ -361,8 +344,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             return;
         }
         
-        // 重置组合输入类型
-        if (!isComposing && timeSinceLastComposition > 500) {
+        // 如果不是组合输入状态，重置组合输入类型
+        if (!isComposing && !isFirstKeyAfterComposition.current) {
             compositionType.current = null;
         }
     }, [isComposing, editorEl]);
