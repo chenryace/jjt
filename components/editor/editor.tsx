@@ -3,7 +3,6 @@ import { use100vh } from 'react-div-100vh';
 import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
 import { configure } from '@gravity-ui/markdown-editor';
 import useMounted from 'libs/web/hooks/use-mounted';
-import { useDictionary } from 'libs/web/hooks/use-dictionary';
 import { NoteModel } from 'libs/shared/note';
 
 configure({
@@ -51,7 +50,6 @@ const Editor: FC<EditorProps> = ({
   const height = use100vh();
   const mounted = useMounted();
   const [hasMinHeight, setHasMinHeight] = useState(true);
-  const dictionary = useDictionary();
   
   // 创建编辑器实例，确保content不为undefined
   const editor = useMarkdownEditor({
