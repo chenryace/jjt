@@ -1,4 +1,4 @@
-import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
+import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef, CompositionEvent as ReactCompositionEvent } from 'react';
 import { use100vh } from 'react-div-100vh';
 import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
@@ -55,7 +55,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     }, [backlinks, isPreview]);
 
     // 添加组合事件处理函数
-    const handleCompositionStart = useCallback((e: CompositionEvent) => {
+    const handleCompositionStart = useCallback((e: ReactCompositionEvent<HTMLDivElement>) => {
         console.log('输入法组合开始', e.data);
         setIsComposing(true);
         inputMethodActive.current = true;
@@ -69,7 +69,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }
     }, []);
 
-    const handleCompositionUpdate = useCallback((e: CompositionEvent) => {
+    const handleCompositionUpdate = useCallback((e: ReactCompositionEvent<HTMLDivElement>) => {
         // 更新组合文本
         compositionText.current = e.data || '';
         
@@ -81,7 +81,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }
     }, []);
 
-    const handleCompositionEnd = useCallback((e: CompositionEvent) => {
+    const handleCompositionEnd = useCallback((e: ReactCompositionEvent<HTMLDivElement>) => {
         console.log('输入法组合结束', {
             data: e.data,
             type: compositionType.current
