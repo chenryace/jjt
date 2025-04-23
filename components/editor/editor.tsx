@@ -38,7 +38,7 @@ const Editor: FC<EditorProps> = ({ readOnly = false, isPreview = false }) => {
     
     // 创建编辑器实例
     const editor = useMarkdownEditor({
-        content: mounted ? (localContent || note?.content || '') : '',
+        initialContent: mounted ? (localContent || note?.content || '') : '',
         readOnly: readOnly,
         autofocus: !isPreview && !readOnly,
         autoFocus: !isPreview && !readOnly,
