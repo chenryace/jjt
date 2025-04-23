@@ -15,13 +15,13 @@ import PortalState from 'libs/web/state/portal';
 import { NoteCacheItem } from 'libs/web/cache';
 import noteCache from 'libs/web/cache/note';
 import { createContainer } from 'unstated-next';
-import MarkdownEditor from '@notea/rich-markdown-editor';
 import { useDebouncedCallback } from 'use-debounce';
 import { ROOT_ID } from 'libs/shared/tree';
 import { has } from 'lodash';
 import UIState from './ui';
 import NoteTreeState from './tree';
 import NoteState from './note';
+import { Editor } from '@gravity-ui/markdown-editor';
 
 const onSearchLink = async (keyword: string) => {
     const list = await searchNote(keyword, NOTE_DELETED.NORMAL);
@@ -52,7 +52,7 @@ const useEditor = (initNote?: NoteModel) => {
     const router = useRouter();
     const { request, error } = useFetcher();
     const toast = useToast();
-    const editorEl = useRef<MarkdownEditor>(null);
+    const editorEl = useRef<Editor | null>(null);
     const treeState = NoteTreeState.useContainer();
     
     // 添加本地更改状态
@@ -129,7 +129,7 @@ const useEditor = (initNote?: NoteModel) => {
             const result = await createNoteWithTitle(title);
 
             if (!result) {
-                throw new Error('todo');
+                throw new Error('创建链接失败');
             }
 
             return `/${result.id}`;
@@ -173,7 +173,7 @@ const useEditor = (initNote?: NoteModel) => {
 
     const onHoverLink = useCallback(
         (event: MouseEvent | ReactMouseEvent) => {
-            if (!isBrowser || editorEl.current?.props.readOnly) {
+            if (!isBrowser || !editorEl.current) {
                 return true;
             }
             const link = event.target as HTMLLinkElement;
@@ -187,7 +187,7 @@ const useEditor = (initNote?: NoteModel) => {
                     preview.setData({ id: href.slice(1) });
                     preview.setAnchor(link);
                 } else {
-                    linkToolbar.setData({ href, view: editorEl.current?.view });
+                    linkToolbar.setData({ href });
                     linkToolbar.setAnchor(link);
                 }
             } else {
@@ -227,8 +227,23 @@ const useEditor = (initNote?: NoteModel) => {
             if (note?.id) {
                 localStorage.setItem(`note_content_${note.id}`, newContent);
             }
+            
+            // 从内容中提取标题（第一个标题或第一行）
+            const titleMatch = newContent.match(/^#\s+(.+)$/m);
+            if (titleMatch && titleMatch[1]) {
+                const newTitle = titleMatch[1].trim();
+                if (newTitle && newTitle !== localTitle) {
+                    onTitleChange(newTitle);
+                }
+            } else {
+                // 如果没有标题，使用第一行作为标题
+                const firstLine = newContent.split('\n')[0].trim();
+                if (firstLine && firstLine !== localTitle && !localTitle) {
+                    onTitleChange(firstLine);
+                }
+            }
         },
-        [note]
+        [note, localTitle]
     );
     
     // 添加标题变更处理
