@@ -261,20 +261,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand, isComposing]);
 
 
-
-        return () => {
-            // 清理事件监听和MutationObserver
-            editorDom.removeEventListener('compositionstart', handleCompositionStart);
-            editorDom.removeEventListener('compositionend', handleCompositionEnd);
-            if (observerRef.current) {
-                observerRef.current.disconnect();
-                observerRef.current = null;
-            }
-            // 清理安全定时器
-            clearInterval(safetyTimer);
-        };
-    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand, isComposing]);
-
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
     const handleKeyDown = useCallback((e: ReactKeyboardEvent) => {
