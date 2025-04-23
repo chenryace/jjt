@@ -1,8 +1,6 @@
 import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
-// 使用命名导入语法，确保TypeScript能正确识别组件的使用
-import MarkdownEditor, { Props as MarkdownEditorProps } from '@notea/rich-markdown-editor';
-// 注意：这里不再单独导入Props，而是使用重命名导入
+import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
 import Tooltip from './tooltip';
@@ -12,7 +10,7 @@ import { useToast } from 'libs/web/hooks/use-toast';
 import { useDictionary } from './dictionary';
 import { useEmbeds } from './embeds';
 
-export interface EditorProps extends Pick<MarkdownEditorProps, 'readOnly'> {
+export interface EditorProps extends Pick<Props, 'readOnly'> {
     isPreview?: boolean;
 }
 
@@ -75,28 +73,13 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 break;
             case '/':
                 // 处理斜杠命令，确保命令菜单显示
-                // 使用requestAnimationFrame代替setTimeout，确保在下一帧渲染前处理
-                requestAnimationFrame(() => {
+                setTimeout(() => {
                     if (editorEl.current && editorEl.current.view) {
-                        // 检查编辑器状态是否已经有斜杠
+                        // 模拟斜杠命令触发
                         const { state } = editorEl.current.view;
-                        const { selection } = state;
-                        const { from } = selection;
-                        
-                        // 获取当前位置前的文本
-                        const textBefore = state.doc.textBetween(
-                            Math.max(0, from - 1),
-                            from,
-                            ''
-                        );
-                        
-                        // 只有当前位置前没有斜杠时才插入
-                        if (textBefore !== '/') {
-                            // 模拟斜杠命令触发
-                            editorEl.current.view.dispatch(state.tr.insertText('/'));
-                        }
+                        editorEl.current.view.dispatch(state.tr.insertText('/'));
                     }
-                });
+                }, 10);
                 break;
             default:
                 break;
@@ -124,29 +107,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 如果有特殊字符需要处理，设置标志
         if (pendingChars.current) {
             needsSpecialCharHandling.current = true;
-            console.log(`组合输入结束，待处理特殊字符: ${pendingChars.current}`);
-            
-            // 检查是否包含斜杠，如果包含，需要特殊处理
-            if (pendingChars.current.includes('/') && editorEl.current && editorEl.current.view) {
-                // 检查编辑器状态，避免重复插入斜杠
-                const { state } = editorEl.current.view;
-                const { selection } = state;
-                const { from } = selection;
-                
-                // 获取当前位置前的文本
-                const textBefore = state.doc.textBetween(
-                    Math.max(0, from - 1),
-                    from,
-                    ''
-                );
-                
-                // 如果前一个字符已经是斜杠，则不再处理
-                if (textBefore === '/') {
-                    console.log('组合输入结束: 检测到已有斜杠，跳过处理');
-                    needsSpecialCharHandling.current = false;
-                    pendingChars.current = "";
-                }
-            }
         }
         
         // 重置组合状态
@@ -171,10 +131,9 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 isEditorLocked.current = false;
             }
         });
-    }
     }, [editorEl]);
 
-    // 添加编辑器DOM引用的事件监听和MutationObserver
+    // 添加编辑器DOM引用的事件监听和输入事件处理
     useEffect(() => {
         if (!editorEl.current || isPreview || readOnly) return;
 
@@ -186,64 +145,47 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         editorDom.addEventListener('compositionstart', handleCompositionStart);
         editorDom.addEventListener('compositionend', handleCompositionEnd);
         
-        // 添加输入事件监听，用于检测组合输入结束后的实际输入
+        // 添加输入事件监听，用于处理组合输入结束后的状态
         const handleInput = () => {
-            // 如果组合输入刚刚结束且有待处理的特殊字符
-            if (needsSpecialCharHandling.current && pendingChars.current) {
-                console.log('输入事件：处理待处理的特殊字符', pendingChars.current);
-                
-                // 计算自上次组合输入结束的时间差
-                const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
-                
-                // 如果时间差小于100ms，使用requestAnimationFrame延迟处理
-                // 这样可以确保编辑器内部状态已经稳定
-                if (timeSinceCompositionEnd < 100) {
-                    requestAnimationFrame(() => {
-                        // 再次检查状态，确保在执行时仍然需要处理
-                        if (needsSpecialCharHandling.current && pendingChars.current) {
-                            // 立即处理特殊字符
-                            if (pendingChars.current.includes('/')) {
-                                handleMarkdownCommand('/');
-                            } else if (pendingChars.current.includes('*')) {
-                                handleMarkdownCommand('*');
-                            } else if (pendingChars.current.includes('#')) {
-                                handleMarkdownCommand('#');
-                            }
-                            
-                            // 重置待处理状态
-                            needsSpecialCharHandling.current = false;
-                            pendingChars.current = "";
-                        }
-                    });
-                } else {
-                    // 立即处理特殊字符
-                    if (pendingChars.current.includes('/')) {
-                        handleMarkdownCommand('/');
-                    } else if (pendingChars.current.includes('*')) {
-                        handleMarkdownCommand('*');
-                    } else if (pendingChars.current.includes('#')) {
-                        handleMarkdownCommand('#');
-                    }
-                    
-                    // 重置待处理状态
-                    needsSpecialCharHandling.current = false;
-                    pendingChars.current = "";
-                }
-            }
+            // 检查是否刚刚完成了组合输入
+            const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
             
-            // 确保编辑器未锁定
-            if (isEditorLocked.current) {
+            // 如果刚刚完成组合输入（300ms内）
+            if (timeSinceCompositionEnd < 300) {
+                console.log('输入事件：检测到刚刚完成组合输入');
+                
+                // 确保编辑器未锁定
                 isEditorLocked.current = false;
+                
+                // 如果有特殊字符需要处理
+                if (needsSpecialCharHandling.current && pendingChars.current) {
+                    console.log(`输入事件：处理特殊字符 ${pendingChars.current}`);
+                    
+                    // 使用requestAnimationFrame确保在下一帧处理
+                    requestAnimationFrame(() => {
+                        if (pendingChars.current.includes('/')) {
+                            handleMarkdownCommand('/');
+                        } else if (pendingChars.current.includes('*')) {
+                            handleMarkdownCommand('*');
+                        } else if (pendingChars.current.includes('#')) {
+                            handleMarkdownCommand('#');
+                        }
+                        
+                        // 重置待处理状态
+                        needsSpecialCharHandling.current = false;
+                        pendingChars.current = "";
+                    });
+                }
             }
         };
         
         // 添加输入事件监听
         editorDom.addEventListener('input', handleInput);
         
-        // 创建MutationObserver来监听DOM变化
+        // 创建MutationObserver作为备用机制
         const observer = new MutationObserver((mutations) => {
             // 如果不需要处理特殊字符，直接返回
-            if (!needsSpecialCharHandling.current) return;
+            if (!needsSpecialCharHandling.current || !pendingChars.current) return;
             
             // 检查是否有文本内容变化
             const hasTextChange = mutations.some(mutation => 
@@ -254,45 +196,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             );
             
             if (hasTextChange) {
-                // 计算自上次组合输入结束的时间差
-                const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
-                // 计算自上次键盘操作的时间差
-                const timeSinceKeyPress = Date.now() - lastKeyPressTime.current;
+                console.log(`MutationObserver：检测到DOM变化，处理特殊字符 ${pendingChars.current}`);
                 
-                // 如果时间差太小，可能是重复处理，跳过
-                if (timeSinceCompositionEnd < 50 || timeSinceKeyPress < 50) {
-                    console.log('MutationObserver: 检测到可能的重复处理，跳过');
-                    return;
-                }
-                
-                // 检查编辑器状态，避免重复插入斜杠
-                if (pendingChars.current.includes('/') && editorEl.current && editorEl.current.view) {
-                    const { state } = editorEl.current.view;
-                    const { selection } = state;
-                    const { from } = selection;
-                    
-                    // 获取当前位置前的文本
-                    const textBefore = state.doc.textBetween(
-                        Math.max(0, from - 1),
-                        from,
-                        ''
-                    );
-                    
-                    // 如果前一个字符已经是斜杠，则不再处理
-                    if (textBefore === '/') {
-                        console.log('MutationObserver: 检测到已有斜杠，跳过处理');
-                        needsSpecialCharHandling.current = false;
-                        pendingChars.current = "";
-                        return;
-                    }
-                    
-                    // 处理斜杠命令
+                // 处理特殊字符
+                if (pendingChars.current.includes('/')) {
                     handleMarkdownCommand('/');
                 } else if (pendingChars.current.includes('*')) {
-                    // 处理加粗/斜体命令
                     handleMarkdownCommand('*');
                 } else if (pendingChars.current.includes('#')) {
-                    // 处理标题命令
                     handleMarkdownCommand('#');
                 }
                 
@@ -309,7 +220,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         observer.observe(editorDom, {
             childList: true,
             subtree: true,
-            characterData: true
+            characterData: true,
+            characterDataOldValue: true
         });
 
         // 添加安全机制，防止编辑器永久锁定
@@ -319,13 +231,41 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 console.log('安全机制：检测到异常锁定状态，强制解锁');
                 isEditorLocked.current = false;
             }
-        }, 200); // 减少间隔时间，提高响应速度
+            
+            // 检查是否长时间未解锁
+            const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
+            if (isEditorLocked.current && timeSinceLastComposition > 300) {
+                console.log('安全机制：检测到长时间锁定，强制解锁');
+                isEditorLocked.current = false;
+            }
+            
+            // 额外检查：如果用户最近尝试过Enter或Backspace操作但被阻止，强制解锁
+            if (isEditorLocked.current && (Date.now() - lastKeyPressTime.current > 300)) {
+                console.log('安全机制：检测到可能的键盘操作被阻止，强制解锁');
+                isEditorLocked.current = false;
+            }
+        }, 300); // 减少间隔时间，提高响应速度
 
         return () => {
             // 清理事件监听和MutationObserver
             editorDom.removeEventListener('compositionstart', handleCompositionStart);
             editorDom.removeEventListener('compositionend', handleCompositionEnd);
             editorDom.removeEventListener('input', handleInput);
+            if (observerRef.current) {
+                observerRef.current.disconnect();
+                observerRef.current = null;
+            }
+            // 清理安全定时器
+            clearInterval(safetyTimer);
+        };
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionEnd, handleMarkdownCommand, isComposing]);
+
+
+
+        return () => {
+            // 清理事件监听和MutationObserver
+            editorDom.removeEventListener('compositionstart', handleCompositionStart);
+            editorDom.removeEventListener('compositionend', handleCompositionEnd);
             if (observerRef.current) {
                 observerRef.current.disconnect();
                 observerRef.current = null;
@@ -344,55 +284,59 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 记录最后一次键盘操作时间
         lastKeyPressTime.current = Date.now();
         
-        // 检查输入法状态 - 使用原生事件的isComposing属性
-        const nativeIsComposing = e.nativeEvent && e.nativeEvent.isComposing;
-        
         // 处理通过数字键选择候选词的情况
-        if ((isComposing || nativeIsComposing) && e.key >= '1' && e.key <= '9') {
+        if (isComposing && e.key >= '1' && e.key <= '9') {
             console.log(`组合输入中通过数字键选择候选词: ${e.key}`);
             // 不阻止默认行为，让输入法正常处理
             return;
         }
         
-        // 处理Enter键 - 无论在什么状态下都确保它能正常工作
-        if (e.key === 'Enter') {
-            // 如果是在组合输入状态，但不是选择候选词的数字键
-            if (nativeIsComposing) {
-                console.log('检测到输入法组合状态下的Enter键');
-                // 不阻止默认行为，让输入法完成当前输入
-                return;
-            }
+        // 处理可能的输入速度过快导致的Enter键无效问题
+        if (e.key === 'Enter' && e.nativeEvent && e.nativeEvent.isComposing) {
+            console.log('检测到可能的输入速度过快导致的Enter键');
+            // 确保编辑器不会锁定Enter键
+            isEditorLocked.current = false;
+            // 不阻止默认行为，允许Enter键正常工作
+            return;
+        }
+        
+        // 处理中文输入法下输入英文或单个中文词组后无法换行或删除的问题
+        // 这里不再检查isComposing状态，因为组合输入结束后isComposing已经为false
+        // 但此时可能仍然存在键盘事件被阻止的问题
+        if ((e.key === 'Enter' || e.key === 'Backspace')) {
+            // 检查是否刚刚完成了组合输入（无论是中文还是英文）
+            const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
             
-            // 如果编辑器被锁定但实际上不在组合输入状态，强制解锁
-            if (isEditorLocked.current && !isComposing && !nativeIsComposing) {
-                console.log('检测到编辑器锁定但不在组合输入状态，强制解锁');
+            // 如果是刚刚完成组合输入（300ms内）或编辑器被锁定，强制解锁
+            if (timeSinceLastComposition < 300 || isEditorLocked.current) {
+                console.log(`检测到组合输入后键盘操作: ${e.key}，强制解锁编辑器`);
                 isEditorLocked.current = false;
-                // 不阻止默认行为
+                
+                // 确保编辑器能够接收键盘事件
+                if (editorEl.current && editorEl.current.element) {
+                    // 尝试聚焦编辑器
+                    requestAnimationFrame(() => {
+                        if (editorEl.current && editorEl.current.element) {
+                            editorEl.current.element.focus();
+                        }
+                    });
+                }
+                
+                // 不阻止默认行为，允许键盘操作正常工作
                 return;
             }
         }
         
-        // 处理Backspace键 - 确保它在组合输入结束后能正常工作
-        if (e.key === 'Backspace') {
-            // 如果编辑器被锁定但实际上不在组合输入状态，强制解锁
-            if (isEditorLocked.current && !isComposing && !nativeIsComposing) {
-                console.log('检测到编辑器锁定但不在组合输入状态，强制解锁');
-                isEditorLocked.current = false;
-                // 不阻止默认行为
-                return;
-            }
-            
-            // 如果在组合输入状态，但有待处理的特殊字符，允许删除它们
-            if ((isComposing || nativeIsComposing) && pendingChars.current.length > 0) {
-                pendingChars.current = pendingChars.current.slice(0, -1);
-                console.log(`删除待处理字符，剩余: ${pendingChars.current}`);
-                // 不阻止默认行为
-                return;
-            }
+        // 如果编辑器状态被锁定，且按下的是Enter或Backspace，则阻止默认行为
+        // 这是一个安全检查，通常不应该执行到这里
+        if (isEditorLocked.current && (e.key === 'Enter' || e.key === 'Backspace')) {
+            console.log(`编辑器锁定中，阻止键: ${e.key}`);
+            isEditorLocked.current = false; // 强制解锁
+            return; // 允许事件继续传播
         }
         
         // 如果在组合输入状态下按下特殊字符
-        if ((isComposing || nativeIsComposing) && specialChars.includes(e.key)) {
+        if (isComposing && specialChars.includes(e.key)) {
             console.log(`组合输入中检测到特殊字符: ${e.key}`);
             // 阻止默认行为
             e.preventDefault();
@@ -401,53 +345,55 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             // 将特殊字符添加到待处理字符串
             pendingChars.current += e.key;
             
-            // 如果是斜杠命令，提供视觉反馈
+            // 如果是斜杠命令，立即在编辑器中显示一个占位符，以便用户知道命令已被捕获
             if (e.key === '/' && editorEl.current && editorEl.current.view) {
                 // 在编辑器中显示视觉反馈，但不实际插入字符
                 const { state } = editorEl.current.view;
                 const { selection } = state;
                 
-                // 设置一个标志，表示已经捕获了斜杠命令
-                needsSpecialCharHandling.current = true;
-                
                 // 在当前位置显示一个闪烁的光标，提示用户命令已被捕获
                 editorEl.current.view.dispatch(state.tr.setSelection(selection));
-                
-                // 记录捕获时间，用于后续处理
-                lastKeyPressTime.current = Date.now();
             }
             return;
         }
         
-        // 处理非组合输入状态下的斜杠键
-        if (!isComposing && !nativeIsComposing && e.key === '/') {
-            // 确保编辑器不会被锁定
-            isEditorLocked.current = false;
+        // 处理组合输入期间的格式化键，防止意外触发Markdown格式化
+        if (isComposing && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'Backspace')) {
+            console.log(`组合输入中检测到格式键: ${e.key}`);
             
-            // 检查是否需要阻止默认行为
-            // 如果编辑器内部已经有斜杠命令处理机制，则不干预
+            // 对于退格键，需要特殊处理，允许删除待处理的特殊字符
+            if (e.key === 'Backspace' && pendingChars.current.length > 0) {
+                pendingChars.current = pendingChars.current.slice(0, -1);
+                console.log(`删除待处理字符，剩余: ${pendingChars.current}`);
+            } else {
+                // 对于其他格式键，阻止默认行为
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            return;
+        }
+        
+        // 处理中文输入法下的斜杠键
+        if (!isComposing && e.key === '/' && e.nativeEvent && e.nativeEvent.isComposing) {
+            console.log('检测到中文输入法下的斜杠键');
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // 立即插入斜杠，确保不会被输入法干扰
             if (editorEl.current && editorEl.current.view) {
                 const { state } = editorEl.current.view;
-                const { selection } = state;
-                const { from } = selection;
+                editorEl.current.view.dispatch(state.tr.insertText('/'));
                 
-                // 获取当前位置前的文本
-                const textBefore = state.doc.textBetween(
-                    Math.max(0, from - 1),
-                    from,
-                    ''
-                );
+                // 确保编辑器不会被锁定
+                isEditorLocked.current = false;
                 
-                // 如果前一个字符已经是斜杠，则阻止重复输入
-                if (textBefore === '/') {
-                    console.log('检测到重复的斜杠输入，阻止默认行为');
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
+                // 强制刷新编辑器状态，确保后续操作可以执行
+                setTimeout(() => {
+                    if (editorEl.current && editorEl.current.view) {
+                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                    }
+                }, 10);
             }
-            
-            // 正常处理斜杠键
             return;
         }
     }, [isComposing, editorEl]);
@@ -457,38 +403,21 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         (value: () => string) => {
             // 如果正在组合输入，不立即触发onChange
             if (isComposing) {
-                console.log('组合输入中，不处理onChange');
+                console.log('组合输入中，延迟处理onChange');
                 return;
             }
             
-            // 计算自上次组合输入结束的时间差
+            // 检查是否刚刚完成组合输入
             const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
             
-            // 如果组合输入刚刚结束（小于100ms），延迟处理onChange
-            // 这样可以确保特殊字符处理完成后再触发onChange
-            if (timeSinceCompositionEnd < 100) {
-                console.log('组合输入刚刚结束，延迟处理onChange');
+            // 如果刚刚完成组合输入（300ms内）且需要处理特殊字符
+            if (timeSinceCompositionEnd < 300 && needsSpecialCharHandling.current) {
+                console.log('刚刚完成组合输入，延迟处理onChange');
+                // 使用requestAnimationFrame代替setTimeout，确保在下一帧渲染前处理
                 requestAnimationFrame(() => {
-                    // 再次检查状态，确保在执行时不在组合输入状态
-                    if (!isComposing) {
-                        onEditorChange(value);
-                    }
-                });
-                return;
-            }
-            
-            // 如果需要处理特殊字符，使用requestAnimationFrame代替setTimeout
-            if (needsSpecialCharHandling.current) {
-                console.log('需要处理特殊字符，使用requestAnimationFrame处理onChange');
-                // 使用requestAnimationFrame确保在下一帧渲染前处理onChange
-                // 这比setTimeout更可靠，因为它与浏览器的渲染周期同步
-                requestAnimationFrame(() => {
-                    // 再次检查状态，确保在执行时仍然需要处理
-                    if (!isComposing) {
-                        onEditorChange(value);
-                        // 处理完成后重置标志
-                        needsSpecialCharHandling.current = false;
-                    }
+                    // 确保编辑器未锁定
+                    isEditorLocked.current = false;
+                    onEditorChange(value);
                 });
                 return;
             }
