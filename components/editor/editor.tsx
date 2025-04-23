@@ -5,6 +5,7 @@ import { configure } from '@gravity-ui/markdown-editor';
 import useMounted from 'libs/web/hooks/use-mounted';
 import { EditorState } from 'libs/web/state/editor';
 import { useDictionary } from 'libs/web/hooks/use-dictionary';
+import { NoteModel } from 'libs/shared/note';
 
 configure({
   // 配置编辑器全局设置
@@ -16,8 +17,8 @@ configure({
 export interface EditorProps {
   note?: {
     id: string;
-    content: string;
-  };
+    content?: string;  // 修改为可选属性，与NoteModel保持一致
+  } & Partial<NoteModel>;
   localContent?: string;
   isPreview?: boolean;
   readOnly?: boolean;
@@ -53,7 +54,7 @@ const Editor: FC<EditorProps> = ({
   const [hasMinHeight, setHasMinHeight] = useState(true);
   const dictionary = useDictionary();
   
-  // 创建编辑器实例
+  // 创建编辑器实例，确保content不为undefined
   const editor = useMarkdownEditor({
     initial: {
       markup: mounted ? (localContent || note?.content || '') : '',
