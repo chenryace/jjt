@@ -1,7 +1,7 @@
 import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
 // 使用命名导入语法，确保TypeScript能正确识别组件的使用
-import MarkdownEditorComponent from '@notea/rich-markdown-editor';
+import MarkdownEditor from '@notea/rich-markdown-editor';
 import { Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
@@ -506,7 +506,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
             >
-                <MarkdownEditorComponent
+                <MarkdownEditor
                     readOnly={readOnly}
                     id={note?.id}
                     ref={editorEl}
