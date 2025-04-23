@@ -4,7 +4,6 @@ import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-edit
 import { configure } from '@gravity-ui/markdown-editor';
 import useMounted from 'libs/web/hooks/use-mounted';
 import EditorState from 'libs/web/state/editor';
-import { useToast } from 'libs/web/hooks/use-toast';
 import { useDictionary } from './dictionary';
 
 // 配置编辑器
@@ -35,7 +34,6 @@ const Editor: FC<EditorProps> = ({ readOnly = false, isPreview = false }) => {
     const height = use100vh();
     const mounted = useMounted();
     const [hasMinHeight, setHasMinHeight] = useState(true);
-    const toast = useToast();
     const dictionary = useDictionary();
     
     // 创建编辑器实例
