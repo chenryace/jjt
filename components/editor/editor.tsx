@@ -3,7 +3,6 @@ import { use100vh } from 'react-div-100vh';
 import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
 import { configure } from '@gravity-ui/markdown-editor';
 import useMounted from 'libs/web/hooks/use-mounted';
-import { EditorState } from 'libs/web/state/editor';
 import { useDictionary } from 'libs/web/hooks/use-dictionary';
 import { NoteModel } from 'libs/shared/note';
 
