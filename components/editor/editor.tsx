@@ -1,6 +1,6 @@
 import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
-import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
+import { default as MarkdownEditor, Props } from '@notea/rich-markdown-editor';
 import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
 import Tooltip from './tooltip';
