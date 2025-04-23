@@ -10,7 +10,7 @@ import { useDictionary } from './dictionary';
 
 // 配置编辑器
 configure({
-  lang: 'zh',
+  lang: 'en',
 });
 
 export interface EditorProps {
