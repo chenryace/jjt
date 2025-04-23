@@ -2,7 +2,6 @@ import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEve
 import { use100vh } from 'react-div-100vh';
 import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
 import { configure } from '@gravity-ui/markdown-editor';
-import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
 import EditorState from 'libs/web/state/editor';
 import { useToast } from 'libs/web/hooks/use-toast';
@@ -35,7 +34,6 @@ const Editor: FC<EditorProps> = ({ readOnly = false, isPreview = false }) => {
     } = EditorState.useContainer();
     const height = use100vh();
     const mounted = useMounted();
-    const editorTheme = useEditorTheme();
     const [hasMinHeight, setHasMinHeight] = useState(true);
     const toast = useToast();
     const dictionary = useDictionary();
