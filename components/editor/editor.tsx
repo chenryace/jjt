@@ -1,8 +1,8 @@
 import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent, useRef } from 'react';
 import { use100vh } from 'react-div-100vh';
 // 使用命名导入语法，确保TypeScript能正确识别组件的使用
-import MarkdownEditor from '@notea/rich-markdown-editor';
-import { Props } from '@notea/rich-markdown-editor';
+import MarkdownEditor, { Props as MarkdownEditorProps } from '@notea/rich-markdown-editor';
+// 注意：这里不再单独导入Props，而是使用重命名导入
 import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
 import Tooltip from './tooltip';
@@ -12,7 +12,7 @@ import { useToast } from 'libs/web/hooks/use-toast';
 import { useDictionary } from './dictionary';
 import { useEmbeds } from './embeds';
 
-export interface EditorProps extends Pick<Props, 'readOnly'> {
+export interface EditorProps extends Pick<MarkdownEditorProps, 'readOnly'> {
     isPreview?: boolean;
 }
 
