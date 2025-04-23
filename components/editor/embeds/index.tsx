@@ -1,6 +1,6 @@
 import CsrfTokenState from 'libs/web/state/csrf-token';
 import { useCallback } from 'react';
-import { Props } from '@notea/rich-markdown-editor';
+import { Props } from '@gravity-ui/markdown-editor';
 import { Bookmark } from './bookmark';
 import { Embed } from './embed';
 import { ReactComponentLike } from 'prop-types';
