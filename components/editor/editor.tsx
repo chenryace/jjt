@@ -60,29 +60,104 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         console.log(`处理Markdown命令: ${command}`);
         
-        // 根据命令类型执行相应操作
-        switch (command) {
-            case '*':
-            case '**':
-                // 强制刷新视图，确保格式化正确应用
-                setTimeout(() => {
-                    if (editorEl.current && editorEl.current.view) {
-                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+        try {
+            // 根据命令类型执行相应操作
+            switch (command) {
+                case '*':
+                case '**':
+                    // 强制刷新视图，确保格式化正确应用
+                    const { state: boldState } = editorEl.current.view;
+                    editorEl.current.view.dispatch(boldState.tr);
+                    
+                    // 使用requestAnimationFrame确保在下一帧渲染前处理
+                    requestAnimationFrame(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            try {
+                                const { state } = editorEl.current.view;
+                                editorEl.current.view.dispatch(state.tr);
+                                
+                                // 确保编辑器接收键盘事件
+                                if (editorEl.current.element) {
+                                    editorEl.current.element.focus();
+                                }
+                            } catch (err) {
+                                console.error('处理加粗命令失败', err);
+                            }
+                        }
+                    });
+                    break;
+                case '/':
+                    // 处理斜杠命令，确保命令菜单显示
+                    const { state: slashState } = editorEl.current.view;
+                    editorEl.current.view.dispatch(slashState.tr.insertText('/'));
+                    
+                    // 使用requestAnimationFrame确保在下一帧渲染前处理
+                    requestAnimationFrame(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            try {
+                                const { state } = editorEl.current.view;
+                                editorEl.current.view.dispatch(state.tr);
+                                
+                                // 确保编辑器接收键盘事件
+                                if (editorEl.current.element) {
+                                    editorEl.current.element.focus();
+                                }
+                            } catch (err) {
+                                console.error('处理斜杠命令失败', err);
+                            }
+                        }
+                    });
+                    break;
+                case '#':
+                    // 处理标题命令
+                    const { state: headingState } = editorEl.current.view;
+                    editorEl.current.view.dispatch(headingState.tr);
+                    
+                    // 使用requestAnimationFrame确保在下一帧渲染前处理
+                    requestAnimationFrame(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            try {
+                                const { state } = editorEl.current.view;
+                                editorEl.current.view.dispatch(state.tr);
+                                
+                                // 确保编辑器接收键盘事件
+                                if (editorEl.current.element) {
+                                    editorEl.current.element.focus();
+                                }
+                            } catch (err) {
+                                console.error('处理标题命令失败', err);
+                            }
+                        }
+                    });
+                    break;
+                default:
+                    // 处理其他命令
+                    const { state: defaultState } = editorEl.current.view;
+                    editorEl.current.view.dispatch(defaultState.tr);
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current.element) {
+                        editorEl.current.element.focus();
                     }
-                }, 10);
-                break;
-            case '/':
-                // 处理斜杠命令，确保命令菜单显示
-                setTimeout(() => {
-                    if (editorEl.current && editorEl.current.view) {
-                        // 模拟斜杠命令触发
-                        const { state } = editorEl.current.view;
-                        editorEl.current.view.dispatch(state.tr.insertText('/'));
+                    break;
+            }
+        } catch (err) {
+            console.error(`处理Markdown命令失败: ${command}`, err);
+            
+            // 出错时也确保编辑器状态正确
+            try {
+                if (editorEl.current && editorEl.current.view) {
+                    const { state } = editorEl.current.view;
+                    editorEl.current.view.dispatch(state.tr);
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current.element) {
+                        editorEl.current.element.focus();
                     }
-                }, 10);
-                break;
-            default:
-                break;
+                }
+            } catch (innerErr) {
+                console.error('恢复编辑器状态失败', innerErr);
+            }
         }
     }, [editorEl]);
 
@@ -118,27 +193,37 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 使用多层次的解锁机制确保编辑器状态正确恢复
         // 第一层：立即执行
         if (editorEl.current && editorEl.current.view) {
-            // 发送一个空操作来刷新编辑器状态
-            editorEl.current.view.dispatch(editorEl.current.view.state.tr);
-            
-            // 确保编辑器接收键盘事件
-            if (editorEl.current.element) {
-                editorEl.current.element.focus();
+            try {
+                // 发送一个空操作来刷新编辑器状态
+                const { state } = editorEl.current.view;
+                editorEl.current.view.dispatch(state.tr);
+                
+                // 确保编辑器接收键盘事件
+                if (editorEl.current.element) {
+                    editorEl.current.element.focus();
+                }
+            } catch (err) {
+                console.error('组合输入结束时刷新编辑器状态失败', err);
             }
         }
         
         // 第二层：使用requestAnimationFrame确保在下一帧渲染前刷新编辑器状态
         requestAnimationFrame(() => {
             if (editorEl.current && editorEl.current.view) {
-                // 再次发送一个空操作来刷新编辑器状态
-                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
-                
-                // 再次确认编辑器已解锁
-                isEditorLocked.current = false;
-                
-                // 确保编辑器接收键盘事件
-                if (editorEl.current.element) {
-                    editorEl.current.element.focus();
+                try {
+                    // 再次发送一个空操作来刷新编辑器状态
+                    const { state } = editorEl.current.view;
+                    editorEl.current.view.dispatch(state.tr);
+                    
+                    // 再次确认编辑器已解锁
+                    isEditorLocked.current = false;
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current.element) {
+                        editorEl.current.element.focus();
+                    }
+                } catch (err) {
+                    console.error('RAF中刷新编辑器状态失败', err);
                 }
             }
         });
@@ -147,10 +232,42 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         setTimeout(() => {
             isEditorLocked.current = false;
             if (editorEl.current && editorEl.current.view) {
-                // 最后一次尝试刷新编辑器状态
-                editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                try {
+                    // 最后一次尝试刷新编辑器状态
+                    const { state } = editorEl.current.view;
+                    editorEl.current.view.dispatch(state.tr);
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current.element) {
+                        editorEl.current.element.focus();
+                    }
+                } catch (err) {
+                    console.error('setTimeout中刷新编辑器状态失败', err);
+                }
             }
         }, 50);
+        
+        // 第四层：使用更长的延迟作为最终保障
+        setTimeout(() => {
+            isEditorLocked.current = false;
+            needsSpecialCharHandling.current = false;
+            pendingChars.current = "";
+            
+            if (editorEl.current && editorEl.current.view) {
+                try {
+                    // 最终保障：刷新编辑器状态
+                    const { state } = editorEl.current.view;
+                    editorEl.current.view.dispatch(state.tr);
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current.element) {
+                        editorEl.current.element.focus();
+                    }
+                } catch (err) {
+                    console.error('最终保障刷新编辑器状态失败', err);
+                }
+            }
+        }, 200);
     }, [editorEl]);
 
     // 添加编辑器DOM引用的事件监听和输入事件处理
@@ -426,7 +543,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         // 检查是否刚刚完成了组合输入
         const timeSinceLastComposition = Date.now() - lastCompositionEndTime.current;
-        const isJustAfterComposition = timeSinceLastComposition < 300;
+        const isJustAfterComposition = timeSinceLastComposition < 500; // 增加时间窗口
         
         // 如果编辑器被锁定，立即解锁
         if (isEditorLocked.current) {
@@ -450,20 +567,46 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 处理可能的输入速度过快导致的Enter键无效问题
         if (e.key === 'Enter') {
             // 检查是否在组合输入中或刚刚完成组合输入
-            if ((e.nativeEvent && e.nativeEvent.isComposing) || isJustAfterComposition) {
+            if ((e.nativeEvent && (e.nativeEvent as any).isComposing) || isJustAfterComposition || isComposing) {
                 console.log('检测到Enter键在组合输入期间或刚刚完成组合输入后');
                 // 确保编辑器不会锁定Enter键
                 isEditorLocked.current = false;
                 
                 // 如果编辑器存在，尝试手动触发换行
-                if (editorEl.current && editorEl.current.view && isJustAfterComposition) {
+                if (editorEl.current && editorEl.current.view) {
                     // 尝试手动插入换行
                     try {
                         const { state } = editorEl.current.view;
-                        editorEl.current.view.dispatch(state.tr.insertText('\n'));
+                        const tr = state.tr.insertText('\n');
+                        editorEl.current.view.dispatch(tr);
+                        
+                        // 确保编辑器接收键盘事件
+                        if (editorEl.current.element) {
+                            editorEl.current.element.focus();
+                        }
+                        
                         // 阻止默认行为，因为我们已经手动处理了
                         e.preventDefault();
                         e.stopPropagation();
+                        
+                        // 使用requestAnimationFrame确保在下一帧渲染前刷新编辑器状态
+                        requestAnimationFrame(() => {
+                            if (editorEl.current && editorEl.current.view) {
+                                try {
+                                    // 再次确保编辑器状态正确
+                                    const { state } = editorEl.current.view;
+                                    editorEl.current.view.dispatch(state.tr);
+                                    
+                                    // 确保编辑器接收键盘事件
+                                    if (editorEl.current.element) {
+                                        editorEl.current.element.focus();
+                                    }
+                                } catch (err) {
+                                    console.error('RAF中刷新编辑器状态失败', err);
+                                }
+                            }
+                        });
+                        
                         return;
                     } catch (err) {
                         console.error('手动插入换行失败', err);
@@ -478,14 +621,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         
         // 处理中文输入法下输入英文或单个中文词组后无法删除的问题
         if (e.key === 'Backspace' || e.key === 'Delete') {
-            // 如果刚刚完成组合输入或编辑器被锁定
-            if (isJustAfterComposition || isEditorLocked.current) {
-                console.log(`检测到删除键在组合输入后: ${e.key}`);
+            // 如果刚刚完成组合输入或编辑器被锁定或正在组合输入
+            if (isJustAfterComposition || isEditorLocked.current || isComposing || (e.nativeEvent && (e.nativeEvent as any).isComposing)) {
+                console.log(`检测到删除键在组合输入期间或组合输入后: ${e.key}`);
                 // 确保编辑器未锁定
                 isEditorLocked.current = false;
                 
                 // 如果编辑器存在，尝试手动触发删除
-                if (editorEl.current && editorEl.current.view && isJustAfterComposition) {
+                if (editorEl.current && editorEl.current.view) {
                     try {
                         const { state } = editorEl.current.view;
                         const { selection } = state;
@@ -503,9 +646,33 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                             }
                             editorEl.current.view.dispatch(tr);
                             
+                            // 确保编辑器接收键盘事件
+                            if (editorEl.current.element) {
+                                editorEl.current.element.focus();
+                            }
+                            
                             // 阻止默认行为，因为我们已经手动处理了
                             e.preventDefault();
                             e.stopPropagation();
+                            
+                            // 使用requestAnimationFrame确保在下一帧渲染前刷新编辑器状态
+                            requestAnimationFrame(() => {
+                                if (editorEl.current && editorEl.current.view) {
+                                    try {
+                                        // 再次确保编辑器状态正确
+                                        const { state } = editorEl.current.view;
+                                        editorEl.current.view.dispatch(state.tr);
+                                        
+                                        // 确保编辑器接收键盘事件
+                                        if (editorEl.current.element) {
+                                            editorEl.current.element.focus();
+                                        }
+                                    } catch (err) {
+                                        console.error('RAF中刷新编辑器状态失败', err);
+                                    }
+                                }
+                            });
+                            
                             return;
                         }
                     } catch (err) {
@@ -543,6 +710,24 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 
                 // 在当前位置显示一个闪烁的光标，提示用户命令已被捕获
                 editorEl.current.view.dispatch(state.tr.setSelection(selection));
+                
+                // 使用requestAnimationFrame确保在下一帧渲染前处理斜杠命令
+                requestAnimationFrame(() => {
+                    if (editorEl.current && editorEl.current.view) {
+                        try {
+                            // 确保编辑器状态正确
+                            const { state } = editorEl.current.view;
+                            editorEl.current.view.dispatch(state.tr);
+                            
+                            // 确保编辑器接收键盘事件
+                            if (editorEl.current.element) {
+                                editorEl.current.element.focus();
+                            }
+                        } catch (err) {
+                            console.error('处理斜杠命令失败', err);
+                        }
+                    }
+                });
             }
             return;
         }
@@ -555,6 +740,35 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             if (e.key === 'Backspace' && pendingChars.current.length > 0) {
                 pendingChars.current = pendingChars.current.slice(0, -1);
                 console.log(`删除待处理字符，剩余: ${pendingChars.current}`);
+                
+                // 确保编辑器接收键盘事件
+                if (editorEl.current && editorEl.current.element) {
+                    editorEl.current.element.focus();
+                }
+            } else if (e.key === 'Enter') {
+                // 对于Enter键，尝试结束组合输入并插入换行
+                setIsComposing(false);
+                isEditorLocked.current = false;
+                
+                // 尝试手动插入换行
+                if (editorEl.current && editorEl.current.view) {
+                    try {
+                        const { state } = editorEl.current.view;
+                        const tr = state.tr.insertText('\n');
+                        editorEl.current.view.dispatch(tr);
+                        
+                        // 确保编辑器接收键盘事件
+                        if (editorEl.current.element) {
+                            editorEl.current.element.focus();
+                        }
+                    } catch (err) {
+                        console.error('组合输入中插入换行失败', err);
+                    }
+                }
+                
+                // 阻止默认行为
+                e.preventDefault();
+                e.stopPropagation();
             } else {
                 // 对于其他格式键，阻止默认行为
                 e.preventDefault();
@@ -564,25 +778,65 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         }
         
         // 处理中文输入法下的斜杠键
-        if (!isComposing && e.key === '/' && e.nativeEvent && e.nativeEvent.isComposing) {
+        if ((!isComposing && e.key === '/' && e.nativeEvent && (e.nativeEvent as any).isComposing) || 
+            (isJustAfterComposition && e.key === '/')) {
             console.log('检测到中文输入法下的斜杠键');
             e.preventDefault();
             e.stopPropagation();
             
             // 立即插入斜杠，确保不会被输入法干扰
             if (editorEl.current && editorEl.current.view) {
-                const { state } = editorEl.current.view;
-                editorEl.current.view.dispatch(state.tr.insertText('/'));
-                
-                // 确保编辑器不会被锁定
-                isEditorLocked.current = false;
-                
-                // 强制刷新编辑器状态，确保后续操作可以执行
-                setTimeout(() => {
-                    if (editorEl.current && editorEl.current.view) {
-                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
+                try {
+                    const { state } = editorEl.current.view;
+                    const tr = state.tr.insertText('/');
+                    editorEl.current.view.dispatch(tr);
+                    
+                    // 确保编辑器不会被锁定
+                    isEditorLocked.current = false;
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current.element) {
+                        editorEl.current.element.focus();
                     }
-                }, 10);
+                    
+                    // 使用requestAnimationFrame确保在下一帧渲染前处理斜杠命令
+                    requestAnimationFrame(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            try {
+                                // 确保编辑器状态正确
+                                const { state } = editorEl.current.view;
+                                // 模拟斜杠命令触发
+                                editorEl.current.view.dispatch(state.tr.insertText('/'));
+                                
+                                // 确保编辑器接收键盘事件
+                                if (editorEl.current.element) {
+                                    editorEl.current.element.focus();
+                                }
+                            } catch (err) {
+                                console.error('处理斜杠命令失败', err);
+                            }
+                        }
+                    });
+                    
+                    // 强制刷新编辑器状态，确保后续操作可以执行
+                    setTimeout(() => {
+                        if (editorEl.current && editorEl.current.view) {
+                            try {
+                                const { state } = editorEl.current.view;
+                                editorEl.current.view.dispatch(state.tr);
+                                
+                                // 确保编辑器接收键盘事件
+                                if (editorEl.current.element) {
+                                    editorEl.current.element.focus();
+                                }
+                            } catch (err) {
+                                console.error('setTimeout中处理斜杠命令失败', err);
+                            }
+                        }
+                    }, 50);
+                } catch (err) {
+                    console.error('插入斜杠失败', err);
+                }
             }
             return;
         }
@@ -599,7 +853,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             
             // 检查是否刚刚完成组合输入
             const timeSinceCompositionEnd = Date.now() - lastCompositionEndTime.current;
-            const isJustAfterComposition = timeSinceCompositionEnd < 300;
+            const isJustAfterComposition = timeSinceCompositionEnd < 500; // 增加时间窗口
             
             // 如果刚刚完成组合输入且需要处理特殊字符
             if (isJustAfterComposition && needsSpecialCharHandling.current) {
@@ -626,15 +880,43 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                         needsSpecialCharHandling.current = false;
                         pendingChars.current = "";
                     }
+                    
+                    // 确保编辑器接收键盘事件
+                    if (editorEl.current && editorEl.current.element) {
+                        editorEl.current.element.focus();
+                    }
                 } catch (err) {
                     console.error('处理特殊字符失败', err);
+                    // 出错时也重置状态，防止卡住
+                    needsSpecialCharHandling.current = false;
+                    pendingChars.current = "";
+                    isEditorLocked.current = false;
                 }
                 
                 // 第二层：使用requestAnimationFrame确保在下一帧渲染前处理
                 requestAnimationFrame(() => {
-                    // 再次确保编辑器未锁定
-                    isEditorLocked.current = false;
-                    onEditorChange(value);
+                    try {
+                        // 再次确保编辑器未锁定
+                        isEditorLocked.current = false;
+                        
+                        // 确保编辑器状态正确
+                        if (editorEl.current && editorEl.current.view) {
+                            const { state } = editorEl.current.view;
+                            editorEl.current.view.dispatch(state.tr);
+                        }
+                        
+                        // 调用原始onChange处理函数
+                        onEditorChange(value);
+                        
+                        // 确保编辑器接收键盘事件
+                        if (editorEl.current && editorEl.current.element) {
+                            editorEl.current.element.focus();
+                        }
+                    } catch (err) {
+                        console.error('RAF中处理onChange失败', err);
+                        // 出错时也调用原始onChange
+                        onEditorChange(value);
+                    }
                 });
                 return;
             }
@@ -646,7 +928,25 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 
                 // 使用requestAnimationFrame确保在下一帧渲染前处理
                 requestAnimationFrame(() => {
-                    onEditorChange(value);
+                    try {
+                        // 确保编辑器状态正确
+                        if (editorEl.current && editorEl.current.view) {
+                            const { state } = editorEl.current.view;
+                            editorEl.current.view.dispatch(state.tr);
+                        }
+                        
+                        // 调用原始onChange处理函数
+                        onEditorChange(value);
+                        
+                        // 确保编辑器接收键盘事件
+                        if (editorEl.current && editorEl.current.element) {
+                            editorEl.current.element.focus();
+                        }
+                    } catch (err) {
+                        console.error('RAF中处理onChange失败', err);
+                        // 出错时也调用原始onChange
+                        onEditorChange(value);
+                    }
                 });
                 return;
             }
@@ -654,7 +954,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             // 否则正常处理onChange
             onEditorChange(value);
         },
-        [isComposing, onEditorChange, handleMarkdownCommand]
+        [isComposing, onEditorChange, handleMarkdownCommand, editorEl]
     );
     
     return (
