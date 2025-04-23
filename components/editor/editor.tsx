@@ -48,14 +48,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
     const lastCompositionEndTime = useRef<number>(0);
     // 跟踪最后一次键盘操作的时间
     const lastKeyPressTime = useRef<number>(0);
-    // 跟踪组合输入结束后的首次键盘事件
-    const isFirstKeyAfterComposition = useRef<boolean>(false);
-    // 跟踪输入法状态
-    const inputMethodActive = useRef<boolean>(false);
     // 跟踪组合输入的内容类型（中文/英文）
     const compositionType = useRef<'chinese' | 'english' | null>(null);
-    // 跟踪组合输入的文本
-    const compositionText = useRef<string>('');
+    // 跟踪组合输入结束后的首次键盘事件
+    const isFirstKeyAfterComposition = useRef<boolean>(false);
+    // 跟踪是否在标题格式中
+    const isInHeadingFormat = useRef<boolean>(false);
+    // 跟踪是否刚刚处理过斜杠命令
+    const justHandledSlashCommand = useRef<boolean>(false);
 
     useEffect(() => {
         if (isPreview) return;
@@ -86,6 +86,25 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                         // 模拟斜杠命令触发
                         const { state } = editorEl.current.view;
                         editorEl.current.view.dispatch(state.tr.insertText('/'));
+                        
+                        // 标记刚刚处理过斜杠命令
+                        justHandledSlashCommand.current = true;
+                        
+                        // 200ms后重置标记
+                        setTimeout(() => {
+                            justHandledSlashCommand.current = false;
+                        }, 200);
+                    }
+                }, 10);
+                break;
+            case '#':
+                // 标记正在标题格式中
+                isInHeadingFormat.current = true;
+                
+                // 强制刷新视图，确保格式化正确应用
+                setTimeout(() => {
+                    if (editorEl.current && editorEl.current.view) {
+                        editorEl.current.view.dispatch(editorEl.current.view.state.tr);
                     }
                 }, 10);
                 break;
@@ -105,23 +124,17 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 重置特殊字符处理标志
         needsSpecialCharHandling.current = false;
         
-        // 设置输入法状态为活跃
-        inputMethodActive.current = true;
-        
         // 根据首个字符判断输入类型
         if (e.data && /[\u4e00-\u9fa5]/.test(e.data)) {
             compositionType.current = 'chinese';
         } else {
             compositionType.current = 'english';
         }
-        
-        // 保存组合文本
-        compositionText.current = e.data || '';
     }, []);
 
     const handleCompositionUpdate = useCallback((e: ReactCompositionEvent<HTMLDivElement>) => {
-        // 更新组合文本
-        compositionText.current = e.data || '';
+        // 更新组合文本内容
+        console.log('输入法组合更新', e.data);
         
         // 根据组合文本内容动态判断输入类型
         if (e.data && /[\u4e00-\u9fa5]/.test(e.data)) {
@@ -151,10 +164,6 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         // 重置组合状态
         setIsComposing(false);
         
-        // 保持输入法状态为活跃，直到下一个键盘事件
-        // 这样可以处理中文输入法下输入英文的情况
-        inputMethodActive.current = true;
-        
         // 立即解锁编辑器，不添加延迟
         isEditorLocked.current = false;
         
@@ -174,6 +183,11 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
         const editorDom = editorEl.current.element;
         if (!editorDom) return;
 
+        // 添加组合事件监听
+        editorDom.addEventListener('compositionstart', handleCompositionStart as any);
+        editorDom.addEventListener('compositionupdate', handleCompositionUpdate as any);
+        editorDom.addEventListener('compositionend', handleCompositionEnd as any);
+        
         // 创建MutationObserver来监听DOM变化
         const observer = new MutationObserver((mutations) => {
             // 如果不需要处理特殊字符，直接返回
@@ -237,10 +251,18 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 console.log('安全机制：检测到可能的键盘操作被阻止，强制解锁');
                 isEditorLocked.current = false;
             }
+            
+            // 如果标题格式标记已经存在超过5秒，重置它
+            if (isInHeadingFormat.current && (Date.now() - lastCompositionEndTime.current > 5000)) {
+                isInHeadingFormat.current = false;
+            }
         }, 300); // 减少间隔时间，提高响应速度
 
         return () => {
-            // 清理MutationObserver
+            // 清理事件监听和MutationObserver
+            editorDom.removeEventListener('compositionstart', handleCompositionStart as any);
+            editorDom.removeEventListener('compositionupdate', handleCompositionUpdate as any);
+            editorDom.removeEventListener('compositionend', handleCompositionEnd as any);
             if (observerRef.current) {
                 observerRef.current.disconnect();
                 observerRef.current = null;
@@ -248,7 +270,7 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             // 清理安全定时器
             clearInterval(safetyTimer);
         };
-    }, [editorEl, isPreview, readOnly, handleMarkdownCommand, isComposing]);
+    }, [editorEl, isPreview, readOnly, handleCompositionStart, handleCompositionUpdate, handleCompositionEnd, handleMarkdownCommand, isComposing]);
 
     
     // 自定义键盘事件处理，解决中文输入法下斜杠命令和特殊字符问题
@@ -284,18 +306,35 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             return;
         }
         
+        // 特殊处理标题格式中的操作
+        if (isInHeadingFormat.current && (e.key === 'Enter' || e.key === 'Backspace')) {
+            console.log(`检测到标题格式中的键盘操作: ${e.key}`);
+            // 确保编辑器不会锁定
+            isEditorLocked.current = false;
+            // 如果是Enter键，重置标题格式标记
+            if (e.key === 'Enter') {
+                isInHeadingFormat.current = false;
+            }
+            // 不阻止默认行为，允许键盘操作正常工作
+            return;
+        }
+        
+        // 特殊处理斜杠命令后的操作
+        if (justHandledSlashCommand.current && (e.key === 'Enter' || e.key === 'Backspace')) {
+            console.log(`检测到斜杠命令后的键盘操作: ${e.key}`);
+            // 确保编辑器不会锁定
+            isEditorLocked.current = false;
+            // 不阻止默认行为，允许键盘操作正常工作
+            return;
+        }
+        
         // 处理中文输入法下的Enter键和Backspace键
-        if ((e.key === 'Enter' || e.key === 'Backspace') && 
-            !isComposing && 
-            inputMethodActive.current) {
-            
+        if ((e.key === 'Enter' || e.key === 'Backspace') && !isComposing) {
             // 如果是组合输入刚结束后的首次键盘事件，或者时间间隔很短
             if (isJustAfterComposition || timeSinceLastComposition < 100) {
                 console.log(`检测到组合输入后的键盘操作: ${e.key}`);
-                
                 // 确保编辑器不会锁定
                 isEditorLocked.current = false;
-                
                 // 不阻止默认行为，允许键盘操作正常工作
                 return;
             }
@@ -303,10 +342,8 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             // 如果是中文输入法下输入英文的情况
             if (compositionType.current === 'english') {
                 console.log(`检测到中文输入法下输入英文后的键盘操作: ${e.key}`);
-                
                 // 确保编辑器不会锁定
                 isEditorLocked.current = false;
-                
                 // 不阻止默认行为，允许键盘操作正常工作
                 return;
             }
@@ -381,6 +418,14 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
                 // 确保编辑器不会被锁定
                 isEditorLocked.current = false;
                 
+                // 标记刚刚处理过斜杠命令
+                justHandledSlashCommand.current = true;
+                
+                // 200ms后重置标记
+                setTimeout(() => {
+                    justHandledSlashCommand.current = false;
+                }, 200);
+                
                 // 强制刷新编辑器状态，确保后续操作可以执行
                 setTimeout(() => {
                     if (editorEl.current && editorEl.current.view) {
@@ -391,9 +436,44 @@ const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
             return;
         }
         
-        // 如果不是组合输入状态，重置输入法状态
+        // 检测标题格式
+        if (!isComposing && e.key === '#') {
+            console.log('检测到可能的标题格式');
+            // 标记可能在标题格式中
+            setTimeout(() => {
+                // 检查是否后面跟着空格，确认是标题格式
+                if (editorEl.current && editorEl.current.view) {
+                    const { state } = editorEl.current.view;
+                    const { selection } = state;
+                    const { from } = selection;
+                    const text = state.doc.textBetween(Math.max(0, from - 2), from);
+                    if (text === '# ' || text.endsWith('# ')) {
+                        console.log('确认在标题格式中');
+                        isInHeadingFormat.current = true;
+                    }
+                }
+            }, 50);
+        }
+        
+        // 如果按下空格键，检查是否在标题格式中
+        if (!isComposing && e.key === ' ' && !isInHeadingFormat.current) {
+            setTimeout(() => {
+                // 检查前面是否有#，确认是标题格式
+                if (editorEl.current && editorEl.current.view) {
+                    const { state } = editorEl.current.view;
+                    const { selection } = state;
+                    const { from } = selection;
+                    const text = state.doc.textBetween(Math.max(0, from - 2), from);
+                    if (text === '# ' || text.endsWith('# ')) {
+                        console.log('确认在标题格式中');
+                        isInHeadingFormat.current = true;
+                    }
+                }
+            }, 50);
+        }
+        
+        // 重置组合输入类型
         if (!isComposing && !isJustAfterComposition && timeSinceLastComposition > 500) {
-            inputMethodActive.current = false;
             compositionType.current = null;
         }
     }, [isComposing, editorEl]);
