@@ -1,157 +1,103 @@
-import { FC, useEffect, useState, useCallback, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { use100vh } from 'react-div-100vh';
-import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
+import MarkdownEditor, { Props } from '@notea/rich-markdown-editor';
+import { useEditorTheme } from './theme';
 import useMounted from 'libs/web/hooks/use-mounted';
-import { NoteModel } from 'libs/shared/note';
+import Tooltip from './tooltip';
+import extensions from './extensions';
+import EditorState from 'libs/web/state/editor';
+import { useToast } from 'libs/web/hooks/use-toast';
+import { useDictionary } from './dictionary';
+import { useEmbeds } from './embeds';
 
-// 移除configure调用，因为它只用于语言配置，不是必需的
-
-export interface EditorProps {
-  note?: {
-    id: string;
-    content?: string;  // 修改为可选属性，与NoteModel保持一致
-  } & Partial<NoteModel>;
-  localContent?: string;
-  readOnly?: boolean;
-  className?: string;
-  minHeight?: number;
-  onSave?: (content: string) => void;
-  onCtrlEnter?: (content: string) => void;
-  onEscape?: () => void;
-  onBlur?: () => void;
-  onFocus?: () => void;
-  onUploadImage?: (file: File) => Promise<string>;
-  onNeedSave?: (content: string) => void;
-  onContentChange?: (content: string) => void;
+export interface EditorProps extends Pick<Props, 'readOnly'> {
+    isPreview?: boolean;
 }
 
-const Editor: FC<EditorProps> = ({
-  note,
-  localContent,
-  className,
-  minHeight,
-  onSave,
-  onCtrlEnter,
-  onEscape,
-  onBlur,
-  onFocus,
-  onNeedSave,
-  onContentChange,
-}) => {
-  const height = use100vh();
-  const mounted = useMounted();
-  const [hasMinHeight] = useState(true);
-  
-  // 创建编辑器实例，确保content不为undefined
-  const editor = useMarkdownEditor({
-    initial: {
-      markup: mounted ? (localContent || note?.content || '') : '',
-      mode: 'wysiwyg',
-      toolbarVisible: true,
-      splitModeEnabled: false,
-    },
-    md: {
-      html: true,
-      linkify: true,
-      breaks: true,
-    },
-    handlers: {
-      // 可以添加文件上传等处理程序
-    },
-  });
+const Editor: FC<EditorProps> = ({ readOnly, isPreview }) => {
+    const {
+        onSearchLink,
+        onCreateLink,
+        onClickLink,
+        onUploadImage,
+        onHoverLink,
+        onEditorChange,
+        backlinks,
+        editorEl,
+        note,
+    } = EditorState.useContainer();
+    const height = use100vh();
+    const mounted = useMounted();
+    const editorTheme = useEditorTheme();
+    const [hasMinHeight, setHasMinHeight] = useState(true);
+    const toast = useToast();
+    const dictionary = useDictionary();
+    const embeds = useEmbeds();
 
-  // 监听内容变化
-  useEffect(() => {
-    if (!editor) return;
+    useEffect(() => {
+        if (isPreview) return;
+        setHasMinHeight((backlinks?.length ?? 0) <= 0);
+    }, [backlinks, isPreview]);
 
-    // 监听内容变化
-    editor.on('change', (value) => {
-      const content = value || '';
-      if (onContentChange) {
-        onContentChange(content);
-      }
-      
-      // 通知需要保存
-      if (onNeedSave) {
-        onNeedSave(content);
-      }
-    });
+    return (
+        <>
+            <MarkdownEditor
+                readOnly={readOnly}
+                id={note?.id}
+                ref={editorEl}
+                value={mounted ? note?.content : ''}
+                onChange={onEditorChange}
+                placeholder={dictionary.editorPlaceholder}
+                theme={editorTheme}
+                uploadImage={(file) => onUploadImage(file, note?.id)}
+                onSearchLink={onSearchLink}
+                onCreateLink={onCreateLink}
+                onClickLink={onClickLink}
+                onHoverLink={onHoverLink}
+                onShowToast={toast}
+                dictionary={dictionary}
+                tooltip={Tooltip}
+                extensions={extensions}
+                className="px-4 md:px-0"
+                embeds={embeds}
+            />
+            <style jsx global>{`
+                .ProseMirror ul {
+                    list-style-type: disc;
+                }
 
-    // 不需要显式取消订阅，编辑器实例会处理清理工作
-    return () => {
-      // 清理工作由编辑器实例自行处理
-    };
-  }, [editor, onContentChange, onNeedSave]);
+                .ProseMirror ol {
+                    list-style-type: decimal;
+                }
 
-  // 处理键盘事件
-  const handleKeyDown = useCallback(
-    (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      // Ctrl+Enter 处理
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && onCtrlEnter) {
-        e.preventDefault();
-        const content = editor.getValue();
-        onCtrlEnter(content);
-        return;
-      }
+                .ProseMirror {
+                    ${hasMinHeight
+                        ? `min-height: calc(${
+                              height ? height + 'px' : '100vh'
+                          } - 14rem);`
+                        : ''}
+                    padding-bottom: 10rem;
+                }
 
-      // Escape 处理
-      if (e.key === 'Escape' && onEscape) {
-        e.preventDefault();
-        onEscape();
-        return;
-      }
+                .ProseMirror h1 {
+                    font-size: 2.8em;
+                }
+                .ProseMirror h2 {
+                    font-size: 1.8em;
+                }
+                .ProseMirror h3 {
+                    font-size: 1.5em;
+                }
+                .ProseMirror a:not(.bookmark) {
+                    text-decoration: underline;
+                }
 
-      // Ctrl+S 处理
-      if (e.key === 's' && (e.ctrlKey || e.metaKey) && onSave) {
-        e.preventDefault();
-        const content = editor.getValue();
-        onSave(content);
-        return;
-      }
-    },
-    [editor, onCtrlEnter, onEscape, onSave]
-  );
-
-  // 注意：由于MarkdownEditorView不支持onBlur和onFocus属性，
-  // 我们需要在父级div上处理这些事件
-  const handleDivBlur = useCallback(() => {
-    if (onBlur) {
-      onBlur();
-    }
-  }, [onBlur]);
-
-  const handleDivFocus = useCallback(() => {
-    if (onFocus) {
-      onFocus();
-    }
-  }, [onFocus]);
-
-  // 计算编辑器高度
-  const editorHeight = minHeight
-    ? hasMinHeight
-      ? `${minHeight}px`
-      : 'auto'
-    : height
-    ? `${height - 50}px`
-    : '100vh';
-
-  return (
-    <div
-      className={`editor-container ${className || ''}`}
-      style={{ height: editorHeight }}
-    >
-      <div 
-        onKeyDown={handleKeyDown}
-        onBlur={handleDivBlur}
-        onFocus={handleDivFocus}
-      >
-        <MarkdownEditorView
-          editor={editor}
-          stickyToolbar={true}
-        />
-      </div>
-    </div>
-  );
+                .ProseMirror .image .ProseMirror-selectednode img {
+                    pointer-events: unset;
+                }
+            `}</style>
+        </>
+    );
 };
 
 export default Editor;

@@ -147,7 +147,6 @@ const EditorNavButtons: FC = () => {
                     })}
                     disabled={!note || !hasLocalChanges}
                     icon="DocumentText"
-                    data-save-button="true"
                 />
             </HotkeyTooltip>
             

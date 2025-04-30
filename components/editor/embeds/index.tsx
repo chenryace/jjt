@@ -1,5 +1,6 @@
 import CsrfTokenState from 'libs/web/state/csrf-token';
 import { useCallback } from 'react';
+import { Props } from '@notea/rich-markdown-editor';
 import { Bookmark } from './bookmark';
 import { Embed } from './embed';
 import { ReactComponentLike } from 'prop-types';
@@ -38,9 +39,5 @@ export const useEmbeds = () => {
             matcher: (url) => url.match(/^\/api\/extract\?type=embed/),
             component: createEmbedComponent(Embed),
         },
-    ] as Array<{
-        title: string;
-        matcher: (url: string) => RegExpMatchArray | null;
-        component: (props: EmbedProps) => JSX.Element;
-    }>;
+    ] as Props['embeds'];
 };
