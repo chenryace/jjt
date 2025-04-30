@@ -1,3 +1,4 @@
+import NoteState from 'libs/web/state/note';
 import { useRouter } from 'next/router';
 import {
     useCallback,
@@ -15,13 +16,12 @@ import PortalState from 'libs/web/state/portal';
 import { NoteCacheItem } from 'libs/web/cache';
 import noteCache from 'libs/web/cache/note';
 import { createContainer } from 'unstated-next';
+import MarkdownEditor from '@notea/rich-markdown-editor';
 import { useDebouncedCallback } from 'use-debounce';
 import { ROOT_ID } from 'libs/shared/tree';
 import { has } from 'lodash';
 import UIState from './ui';
 import NoteTreeState from './tree';
-import NoteState from './note';
-import { Editor } from '@gravity-ui/markdown-editor';
 
 const onSearchLink = async (keyword: string) => {
     const list = await searchNote(keyword, NOTE_DELETED.NORMAL);
@@ -52,7 +52,7 @@ const useEditor = (initNote?: NoteModel) => {
     const router = useRouter();
     const { request, error } = useFetcher();
     const toast = useToast();
-    const editorEl = useRef<Editor | null>(null);
+    const editorEl = useRef<MarkdownEditor>(null);
     const treeState = NoteTreeState.useContainer();
     
     // 添加本地更改状态
@@ -60,50 +60,30 @@ const useEditor = (initNote?: NoteModel) => {
     const [localContent, setLocalContent] = useState<string>('');
     const [localTitle, setLocalTitle] = useState<string>('');
     
-    // 添加编辑器渲染状态
-    const [editorKey, setEditorKey] = useState<number>(0);
-    
-    // 初始化本地内容，优化缓存处理
+    // 初始化本地内容
     useEffect(() => {
         if (note) {
-            console.log('初始化编辑器内容', { id: note.id, content: note.content });
-            
-            // 始终优先使用服务器数据
             setLocalContent(note.content || '');
             setLocalTitle(note.title || '');
             setHasLocalChanges(false);
             
-            // 清除localStorage中可能存在的旧数据
+            // 检查localStorage中是否有未保存的内容
             if (note.id) {
-                localStorage.removeItem(`note_content_${note.id}`);
-                localStorage.removeItem(`note_title_${note.id}`);
+                const savedContent = localStorage.getItem(`note_content_${note.id}`);
+                const savedTitle = localStorage.getItem(`note_title_${note.id}`);
+                
+                if (savedContent && savedContent !== note.content) {
+                    setLocalContent(savedContent);
+                    setHasLocalChanges(true);
+                }
+                
+                if (savedTitle && savedTitle !== note.title) {
+                    setLocalTitle(savedTitle);
+                    setHasLocalChanges(true);
+                }
             }
-            
-            // 强制编辑器重新渲染
-            setEditorKey(prev => prev + 1);
-            
-            // 清除与当前笔记无关的缓存
-            clearIrrelevantCache(note.id);
         }
     }, [note]);
-    
-    // 清除与当前笔记无关的缓存
-    const clearIrrelevantCache = useCallback(async (currentNoteId: string) => {
-        try {
-            console.log('清除与当前笔记无关的缓存', currentNoteId);
-            const keys = await noteCache.keys();
-            
-            // 保留当前笔记的缓存，清除其他缓存
-            const keysToRemove = keys.filter(id => id !== currentNoteId);
-            
-            if (keysToRemove.length > 0) {
-                console.log(`清除 ${keysToRemove.length} 个缓存项`);
-                await Promise.all(keysToRemove.map(id => noteCache.removeItem(id)));
-            }
-        } catch (error) {
-            console.error('清除缓存失败', error);
-        }
-    }, []);
 
     const onNoteChange = useDebouncedCallback(
         async (data: Partial<NoteModel>) => {
@@ -129,7 +109,7 @@ const useEditor = (initNote?: NoteModel) => {
             const result = await createNoteWithTitle(title);
 
             if (!result) {
-                throw new Error('创建链接失败');
+                throw new Error('todo');
             }
 
             return `/${result.id}`;
@@ -173,7 +153,7 @@ const useEditor = (initNote?: NoteModel) => {
 
     const onHoverLink = useCallback(
         (event: MouseEvent | ReactMouseEvent) => {
-            if (!isBrowser || !editorEl.current) {
+            if (!isBrowser || editorEl.current?.props.readOnly) {
                 return true;
             }
             const link = event.target as HTMLLinkElement;
@@ -187,7 +167,7 @@ const useEditor = (initNote?: NoteModel) => {
                     preview.setData({ id: href.slice(1) });
                     preview.setAnchor(link);
                 } else {
-                    linkToolbar.setData({ href });
+                    linkToolbar.setData({ href, view: editorEl.current?.view });
                     linkToolbar.setAnchor(link);
                 }
             } else {
@@ -201,7 +181,7 @@ const useEditor = (initNote?: NoteModel) => {
     const [backlinks, setBackLinks] = useState<NoteCacheItem[]>();
 
     const getBackLinks = useCallback(async () => {
-        console.log('获取反向链接', note?.id);
+        console.log(note?.id);
         const linkNotes: NoteCacheItem[] = [];
         if (!note?.id) return linkNotes;
         setBackLinks([]);
@@ -217,9 +197,7 @@ const useEditor = (initNote?: NoteModel) => {
     const onEditorChange = useCallback(
         (value: () => string): void => {
             const newContent = value();
-            console.log('编辑器内容变更', { length: newContent.length });
-            
-            // 更新本地状态
+            // 只更新本地状态，不调用保存
             setLocalContent(newContent);
             setHasLocalChanges(true);
             
@@ -227,31 +205,14 @@ const useEditor = (initNote?: NoteModel) => {
             if (note?.id) {
                 localStorage.setItem(`note_content_${note.id}`, newContent);
             }
-            
-            // 从内容中提取标题（第一个标题或第一行）
-            const titleMatch = newContent.match(/^#\s+(.+)$/m);
-            if (titleMatch && titleMatch[1]) {
-                const newTitle = titleMatch[1].trim();
-                if (newTitle && newTitle !== localTitle) {
-                    onTitleChange(newTitle);
-                }
-            } else {
-                // 如果没有标题，使用第一行作为标题
-                const firstLine = newContent.split('\n')[0].trim();
-                if (firstLine && firstLine !== localTitle && !localTitle) {
-                    onTitleChange(firstLine);
-                }
-            }
         },
-        [note, localTitle]
+        [note]
     );
     
     // 添加标题变更处理
     const onTitleChange = useCallback(
         (title: string): void => {
-            console.log('标题变更', { title });
-            
-            // 更新本地状态
+            // 只更新本地状态，不调用保存
             setLocalTitle(title);
             setHasLocalChanges(true);
             
@@ -313,9 +274,6 @@ const useEditor = (initNote?: NoteModel) => {
                 await treeState.initTree();
             }
             
-            // 强制编辑器重新渲染，解决Markdown渲染问题
-            setEditorKey(prev => prev + 1);
-            
             // 显示保存成功提示
             toast('保存成功', 'success');
             
@@ -350,8 +308,6 @@ const useEditor = (initNote?: NoteModel) => {
     const discardChanges = useCallback(() => {
         if (!note) return;
         
-        console.log('丢弃更改', { id: note.id });
-        
         // 恢复到原始内容
         setLocalContent(note.content || '');
         setLocalTitle(note.title || '');
@@ -363,17 +319,8 @@ const useEditor = (initNote?: NoteModel) => {
             localStorage.removeItem(`note_title_${note.id}`);
         }
         
-        // 强制编辑器重新渲染，解决Markdown渲染问题
-        setEditorKey(prev => prev + 1);
-        
         toast('已丢弃更改', 'info');
     }, [note, toast]);
-    
-    // 添加强制重新渲染函数
-    const forceRender = useCallback(() => {
-        console.log('强制编辑器重新渲染');
-        setEditorKey(prev => prev + 1);
-    }, []);
 
     return {
         onCreateLink,
@@ -394,10 +341,7 @@ const useEditor = (initNote?: NoteModel) => {
         hasLocalChanges,
         localContent,
         localTitle,
-        onTitleChange,
-        // 编辑器渲染相关
-        editorKey,
-        forceRender
+        onTitleChange
     };
 };
 
